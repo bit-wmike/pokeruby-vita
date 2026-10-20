@@ -1,27 +1,27 @@
 Text_ObtainedTheItem: @ 81A0C68
-	.string "Obtained the {STR_VAR_2}.$"
+	.string "{STR_VAR_2} erhalten!$"
 
 Text_TheBagIsFull:: @ 81A0C79
-	.string "The BAG is full...$"
+	.string "Der BEUTEL ist voll...$"
 
 Text_PutItemInPocket: @ 81A0C8C
-	.string "{PLAYER} put away the {STR_VAR_2}\n"
-	.string "in the {STR_VAR_3} POCKET.$"
+	.string "{PLAYER} packt {STR_VAR_2} in die\n"
+	.string "{STR_VAR_3}-TASCHE.$"
 
 Text_FoundOneItem: @ 81A0CB1
-	.string "{PLAYER} found one {STR_VAR_2}!$"
+	.string "{PLAYER} hat {STR_VAR_2} gefunden!$"
 
 Text_TooBadBagIsFull:
-	.string "Too bad!\n"
-	.string "The BAG is full...$"
+	.string "Zu schade!\n"
+	.string "Der BEUTEL ist voll...$"
 
 Text_ObtainedTheDecor: @ 81A0CDE
-	.string "Obtained the {STR_VAR_2}.$"
+	.string "{STR_VAR_2} erhalten.$"
 
 Text_NoRoomLeftForAnother:: @ 81A0CEF
-	.string "Too bad! There's no room left for\n"
-	.string "another {STR_VAR_2}...$"
+	.string "Zu schade! Es ist kein Platz für\n"
+	.string "{STR_VAR_2}...$"
 
 Text_TheDecorWasTransferredToThePC: @ 81A0D1F
-	.string "The {STR_VAR_2} was transferred\n"
-	.string "to the PC.$"
+	.string "{STR_VAR_2} wurde auf den PC\n"
+	.string "übertragen.$"

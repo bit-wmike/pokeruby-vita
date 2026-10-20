@@ -1,316 +1,327 @@
 UnknownString_81A1948: @ 81A1948
-	.string "If some vines drop down, this tree can\n"
-	.string "be climbed.$"
+	.string "Wenn einige Äste herunterhängen, kann\n"
+	.string "man auf den Baum klettern.$"
 
 UnknownString_81A197B: @ 81A197B
-	.string "If some vines drop down, this tree can\n"
-	.string "be climbed.\p"
-	.string "Use the SECRET POWER?$"
+	.string "Wenn einige Äste herunterhängen, kann\n"
+	.string "man auf den Baum klettern.\p"
+	.string "Möchtest du GEHEIMPOWER einsetzen?$"
 
 UnknownString_81A19C4: @ 81A19C4
-	.string "A thick vine dropped down!$"
+	.string "Ein dicker Ast fällt herunter!$"
 
 UnknownString_81A19DF: @ 81A19DF
-	.string "Want to make your SECRET BASE here?$"
+	.string "Möchtest du hier deine GEHEIMBASIS\n"
+	.string "einrichten?$"
 
 UnknownString_81A1A03: @ 81A1A03
-	.string "If this clump of grass can be moved,\n"
-	.string "it might be possible to go inside.$"
+	.string "Dieser Busch kann bewegt werden,\n"
+	.string "so dass man hineinklettern kann.$"
 
 UnknownString_81A1A4B: @ 81A1A4B
-	.string "If this clump of grass can be moved,\n"
-	.string "it might be possible to go inside.\p"
-	.string "Use the SECRET POWER?$"
+	.string "Dieser Busch kann bewegt werden,\n"
+	.string "so dass man hineinklettern kann.\p"
+	.string "Möchtest du GEHEIMPOWER einsetzen?$"
 
 UnknownString_81A1AA9: @ 81A1AA9
-	.string "Discovered a small entrance!$"
+	.string "Ein kleiner Eingang wird sichtbar.$"
 
 UnknownString_81A1AC6: @ 81A1AC6
-	.string "Want to make your SECRET BASE here?$"
+	.string "Möchtest du hier deine GEHEIMBASIS\n"
+	.string "einrichten?$"
 
 SecretBase_RedCave1_Text_1A1AEA:: @ 81A1AEA
-	.string "Have you made a SECRET BASE already?\p"
-	.string "I went here, there, everywhere before\n"
-	.string "choosing this place.\p"
-	.string "Since you're already here, how would\n"
-	.string "you like to battle?$"
+	.string "Hast du dir schon eine GEHEIMBASIS\n"
+	.string "eingerichtet?\p"
+	.string "Ich bin hier und dort, überall hin-\n"
+	.string "gelaufen, bevor ich mich für diesen\l"
+	.string "Ort entschieden habe.\p"
+	.string "Da du schon mal hier bist... Hast du\n"
+	.string "Lust zu kämpfen?$"
 
 SecretBase_RedCave1_Text_1A1B83:: @ 81A1B83
 	.string "Okay!\n"
-	.string "Here we come!$"
+	.string "Jetzt kommen wir!$"
 
 SecretBase_RedCave1_Text_1A1B97:: @ 81A1B97
-	.string "Hunh?\n"
-	.string "Oh, you can't now...$"
+	.string "Wie? Was? Wo?\n"
+	.string "Du kannst doch nicht...$"
 
 UnknownString_81A1BB2:: @ 81A1BB2
-	.string "Waaargh! You're too strong!\n"
-	.string "About me losing... Please keep it secret!$"
+	.string "Ahaaargh! Du bist zu stark für mich! Ich\n"
+	.string "habe verloren, aber verrate das nicht!$"
 
 SecretBase_RedCave1_Text_1A1BF8:: @ 81A1BF8
-	.string "What do you think of my SECRET BASE?\n"
-	.string "Come visit me again tomorrow.$"
+	.string "Was hältst du von meiner GEHEIMBASIS?\n"
+	.string "Komm mich doch morgen wieder besuchen!$"
 
 SecretBase_RedCave1_Text_1A1C3B:: @ 81A1C3B
-	.string "Have you made a SECRET BASE already?\p"
-	.string "I went here, there, everywhere before\n"
-	.string "choosing this place.\p"
-	.string "Feel free to hang out!$"
+	.string "Hast du dir schon eine GEHEIMBASIS\n"
+	.string "eingerichtet?\p"
+	.string "Ich bin hier und dort, überall hin-\n"
+	.string "gelaufen, bevor ich mich für diesen\l"
+	.string "Ort entschieden habe.\p"
+	.string "Schau dich ruhig in aller Ruhe um.$"
 
 SecretBase_RedCave1_Text_1A1CB2:: @ 81A1CB2
-	.string "There're a lot of places where you can\n"
-	.string "make a SECRET BASE.\p"
-	.string "But I like this spot best.\n"
-	.string "Don't you think it's nice?\p"
-	.string "Oh, would you like to have a battle?$"
+	.string "Es gibt eine Menge Orte, an denen man\n"
+	.string "eine GEHEIMBASIS einrichten kann.\p"
+	.string "Aber dieser hier gefällt mir am besten.\n"
+	.string "Findest du es nicht auch nett hier?\p"
+	.string "Oh, hast du Lust auf einen Kampf?$"
 
 SecretBase_RedCave1_Text_1A1D48:: @ 81A1D48
-	.string "Okay, here goes!$"
+	.string "Okay, los geht's!$"
 
 SecretBase_RedCave1_Text_1A1D59:: @ 81A1D59
 	.string "Oh...\n"
-	.string "You can't now, okay.$"
+	.string "Du hast gerade keine Zeit.$"
 
 UnknownString_81A1D74:: @ 81A1D74
-	.string "Hmmm... It's our loss...\n"
-	.string "But don't tell anyone!\l"
-	.string "It's a confidential secret!$"
+	.string "Hmm... Das ist unsere Niederlage...\n"
+	.string "Aber erzähl das bloß nicht weiter!\l"
+	.string "Das ist ein streng geheimes Geheimnis!$"
 
 SecretBase_RedCave1_Text_1A1DC0:: @ 81A1DC0
-	.string "If you're in this area again, I hope\n"
-	.string "you'll visit me.$"
+	.string "Wenn du wieder mal in der Nähe bist,\n"
+	.string "komm mich doch besuchen!$"
 
 SecretBase_RedCave1_Text_1A1DF6:: @ 81A1DF6
-	.string "There're a lot of places where you can\n"
-	.string "make a SECRET BASE.\p"
-	.string "But I like this spot best.\n"
-	.string "Don't you think it's nice?$"
+	.string "Es gibt eine Menge Orte, an denen man\n"
+	.string "eine GEHEIMBASIS einrichten kann.\p"
+	.string "Aber dieser hier gefällt mir am besten.\n"
+	.string "Findest du es nicht auch nett hier?$"
 
 SecretBase_RedCave1_Text_1A1E67:: @ 81A1E67
-	.string "This is a popular spot.\n"
-	.string "It's always taken.\p"
-	.string "Oh! Were you thinking about taking this\n"
-	.string "spot, too?\p"
-	.string "I'll tell you what, you can have this\n"
-	.string "spot if you can beat me.$"
+	.string "Dies ist ein beliebter Platz.\n"
+	.string "Er ist eigentlich immer besetzt.\p"
+	.string "Ach, du wolltest dich hier auch\n"
+	.string "häuslich niederlassen?\p"
+	.string "Ich sag dir was: Du kannst den Platz\n"
+	.string "haben, wenn du mich besiegen kannst.$"
 
 SecretBase_RedCave1_Text_1A1F04:: @ 81A1F04
-	.string "Okay!\n"
-	.string "I'm going to defend my SECRET BASE!$"
+	.string "Okay! Ich werde meine\n"
+	.string "GEHEIMBASIS verteidigen!$"
 
 SecretBase_RedCave1_Text_1A1F2E:: @ 81A1F2E
-	.string "Hunh? Is that right?\n"
-	.string "You're not interested in this spot?$"
+	.string "Was? Stimmt das? Du hast gar\n"
+	.string "kein Interesse an diesem Platz?!?$"
 
 UnknownString_81A1F67:: @ 81A1F67
-	.string "I can't keep going!\n"
-	.string "I surrender!$"
+	.string "Ich kann nicht mehr!\n"
+	.string "Ich gebe mich geschlagen!$"
 
 SecretBase_RedCave1_Text_1A1F88:: @ 81A1F88
-	.string "Okay, when I move one day, this place\n"
-	.string "will be yours!$"
+	.string "Okay, wenn ich eines Tages von hier\n"
+	.string "fortziehe, kannst du den Platz haben.$"
 
 SecretBase_RedCave1_Text_1A1FBD:: @ 81A1FBD
-	.string "This is a popular spot.\n"
-	.string "It's always taken.\p"
-	.string "I waited a long time for it to open.\n"
-	.string "I finally got to use it!$"
+	.string "Dies ist ein beliebter Platz.\n"
+	.string "Er ist eigentlich immer besetzt.\p"
+	.string "Ich habe ewig gewartet, bis er wieder\n"
+	.string "frei wurde. Endlich ist es soweit!$"
 
 SecretBase_RedCave1_Text_1A2026:: @ 81A2026
-	.string "Welcome to my POKéMON LAB.\p"
-	.string "I carry out research on battling in\n"
-	.string "secrecy.\p"
-	.string "Would you like to see how strong I am?$"
+	.string "Willkommen in meinem POKéMON-LABOR.\p"
+	.string "Ich forsche, indem ich im Geheimen\n"
+	.string "kämpfe.\p"
+	.string "Möchtest du sehen, wie stark ich bin?$"
 
 SecretBase_RedCave1_Text_1A2095:: @ 81A2095
-	.string "I'm going to go all out!$"
+	.string "Das war ja wohl nichts!$"
 
 SecretBase_RedCave1_Text_1A20AE:: @ 81A20AE
 	.string "Oh.\n"
-	.string "Some other time, then!$"
+	.string "Ein anderes Mal vielleicht...$"
 
 UnknownString_81A20C9:: @ 81A20C9
-	.string "Hmm... I've still got lots to learn.\n"
-	.string "I have to study some more.$"
+	.string "Hm... Ich muss noch viel lernen.\n"
+	.string "Ich muss fleißiger studieren.$"
 
 SecretBase_RedCave1_Text_1A2109:: @ 81A2109
-	.string "Thanks for battling with me.\n"
-	.string "Please come back again tomorrow.$"
+	.string "Danke, dass du mit mir gekämpft hast.\n"
+	.string "Komm doch bitte morgen wieder.$"
 
 SecretBase_RedCave1_Text_1A2147:: @ 81A2147
-	.string "Welcome to my POKéMON LAB.\p"
-	.string "I carry out research on battling in\n"
-	.string "secrecy.$"
+	.string "Willkommen in meinem POKéMON-LABOR.\p"
+	.string "Ich forsche, indem ich im Geheimen\n"
+	.string "kämpfe.$"
 
 SecretBase_RedCave1_Text_1A218F:: @ 81A218F
-	.string "A big mansion is nice, but I like this\n"
-	.string "sort of place more.\p"
-	.string "I like it because all kinds of people\n"
-	.string "come visit me.\p"
-	.string "So, how would you like a battle?$"
+	.string "Ein großes Anwesen ist natürlich auch\n"
+	.string "ganz nett, aber hier ist es schöner.\p"
+	.string "Viele Leute kommen mich besuchen.\p"
+	.string "So. Wie wäre es mit einem Kampf?$"
 
 SecretBase_RedCave1_Text_1A2220:: @ 81A2220
-	.string "That's the way!$"
+	.string "Genauso muss es laufen!$"
 
 SecretBase_RedCave1_Text_1A2230:: @ 81A2230
-	.string "When you're ready, give me a shout!$"
+	.string "Wenn du bereit bist, sag Bescheid.$"
 
 UnknownString_81A2254:: @ 81A2254
-	.string "Aww! Done in!\n"
-	.string "But it's still fun to battle!$"
+	.string "Ooch! Ich hab's vergeigt!\n"
+	.string "Aber es hat sehr viel Spaß gemacht!$"
 
 SecretBase_RedCave1_Text_1A2280:: @ 81A2280
-	.string "Well, anyway, I should go buy some\n"
-	.string "decorations and furniture.\p"
-	.string "I want my SECRET BASE to be a place\n"
-	.string "other people can enjoy.$"
+	.string "Egal. Ich sollte mir auf jeden Fall einige\n"
+	.string "Dekorationen und Möbel zulegen.\p"
+	.string "Ich möchte, dass sich auch andere in\n"
+	.string "meiner GEHEIMBASIS wohl fühlen.$"
 
 SecretBase_RedCave1_Text_1A22FA:: @ 81A22FA
-	.string "A big mansion is nice, but I like this\n"
-	.string "sort of place more.\p"
-	.string "I like it because all kinds of people\n"
-	.string "come visit me.$"
+	.string "Ein großes Anwesen ist natürlich auch\n"
+	.string "ganz nett, aber hier ist es schöner.\p"
+	.string "Viele Leute kommen mich besuchen.$"
 
 SecretBase_RedCave1_Text_1A236A:: @ 81A236A
-	.string "I simply adore shopping for decorations\n"
-	.string "and furniture.\p"
-	.string "I also love raising POKéMON just\n"
-	.string "as much.\p"
-	.string "If you would be so kind, will you battle\n"
-	.string "with my POKéMON?$"
+	.string "Ich liebe es, Dekorationen und Möbel\n"
+	.string "zu kaufen!!!\p"
+	.string "Ich liebe es genauso, POKéMON aufzu-\n"
+	.string "ziehen!\p"
+	.string "Wärest du so nett, mit meinen\n"
+	.string "POKéMON zu kämpfen?$"
 
 SecretBase_RedCave1_Text_1A2405:: @ 81A2405
-	.string "Thank you.\n"
-	.string "Shall we begin?$"
+	.string "Danke schön.\n"
+	.string "Bist du bereit?$"
 
 SecretBase_RedCave1_Text_1A2420:: @ 81A2420
 	.string "Oh.\n"
-	.string "How disappointing...$"
+	.string "Was für eine Enttäuschung.$"
 
 UnknownString_81A2439:: @ 81A2439
-	.string "I concede...$"
+	.string "Ich kapituliere...$"
 
 SecretBase_RedCave1_Text_1A2446:: @ 81A2446
-	.string "That was all in good fun!\n"
-	.string "I should go enjoy shopping now.$"
+	.string "Das war vielleicht ein Spaß! Und nun\n"
+	.string "sollte ich mich dem Einkaufen widmen.$"
 
 SecretBase_RedCave1_Text_1A2480:: @ 81A2480
-	.string "I simply adore shopping for decorations\n"
-	.string "and furniture.\p"
-	.string "I also love raising POKéMON just\n"
-	.string "as much.$"
+	.string "Ich liebe es, Dekorationen und Möbel\n"
+	.string "zu kaufen!!!\p"
+	.string "Ich liebe es genauso, POKéMON aufzu-\n"
+	.string "ziehen!$"
 
 SecretBase_RedCave1_Text_1A24E1:: @ 81A24E1
-	.string "Some people make their SECRET BASES in\n"
-	.string "hard-to-find places.\l"
-	.string "Do they want to just lie low?\p"
-	.string "But since you found me, how about we\n"
-	.string "have a battle?$"
+	.string "Einige Leute richten ihre GEHEIMBASIS\n"
+	.string "an gut versteckten Orten ein.\l"
+	.string "Wollen sie sich nicht mehr sehen lassen?\p"
+	.string "Da du mich gefunden hast, lass uns\n"
+	.string "doch gleich mal kämpfen.$"
 
 SecretBase_RedCave1_Text_1A256F:: @ 81A256F
-	.string "I'm not going down easily!$"
+	.string "Ich bin nicht einfach zu besiegen!$"
 
 SecretBase_RedCave1_Text_1A258A:: @ 81A258A
-	.string "Oh... Are you maybe tired from searching\n"
-	.string "for this place?$"
+	.string "Oh. Sag bloß, du bist müde von der Suche\n"
+	.string "nach diesem Platz?$"
 
 UnknownString_81A25C3:: @ 81A25C3
-	.string "I went down...$"
+	.string "Ich bin untergegangen...$"
 
 SecretBase_RedCave1_Text_1A25D2:: @ 81A25D2
-	.string "Where's your SECRET BASE?\n"
-	.string "I should go visit you there.$"
+	.string "Wo ist deine GEHEIMBASIS?\n"
+	.string "Ich sollte dich dort mal besuchen.$"
 
 SecretBase_RedCave1_Text_1A2609:: @ 81A2609
-	.string "Some people make their SECRET BASES in\n"
-	.string "hard-to-find places.\l"
-	.string "Do they want to just lie low?$"
+	.string "Einige Leute richten ihre GEHEIMBASIS\n"
+	.string "an gut versteckten Orten ein.\l"
+	.string "Wollen sie sich nicht mehr sehen lassen?$"
 
 SecretBase_RedCave1_Text_1A2663:: @ 81A2663
-	.string "People have told me that you can get\n"
-	.string "decorations in several ways.\p"
-	.string "We should have a race to see who can\n"
-	.string "get nicer decorations and furniture!\p"
-	.string "In the meantime, want to battle?$"
+	.string "Einige Leute haben mir erzählt, dass man\n"
+	.string "auf verschiedene Arten an Deko-\l"
+	.string "rationen kommen kann.\p"
+	.string "Wir sollten einen Wettbewerb veran-\n"
+	.string "stalten, wer die schönsten Dinge hat.\p"
+	.string "Aber zuerst lass uns kämpfen.$"
 
 SecretBase_RedCave1_Text_1A2710:: @ 81A2710
-	.string "This is my SECRET BASE.\n"
-	.string "I can't lose!$"
+	.string "Das ist meine GEHEIMBASIS.\n"
+	.string "Ich kann hier gar nicht verlieren!$"
 
 SecretBase_RedCave1_Text_1A2736:: @ 81A2736
-	.string "I'll battle with you anytime.$"
+	.string "Ich kämpfe jederzeit mit dir.$"
 
 UnknownString_81A2754:: @ 81A2754
-	.string "Huh?\n"
-	.string "Did I just lose?$"
+	.string "Wie?\n"
+	.string "Ich habe doch verloren?$"
 
 SecretBase_RedCave1_Text_1A276A:: @ 81A276A
-	.string "I won't lose at collecting decorations.\n"
-	.string "Come visit again!$"
+	.string "Ich werde den Wettbewerb um die\n"
+	.string "schönsten Dekorationen nicht ver-\l"
+	.string "lieren. Überzeuge dich selbst!$"
 
 SecretBase_RedCave1_Text_1A27A4:: @ 81A27A4
-	.string "People have told me that you can get\n"
-	.string "decorations in several ways.\p"
-	.string "We should have a race to see who can\n"
-	.string "get nicer decorations and furniture!$"
+	.string "Einige Leute haben mir erzählt, dass man\n"
+	.string "auf verschiedene Arten an Deko-\l"
+	.string "rationen kommen kann.\p"
+	.string "Wir sollten einen Wettbewerb veran-\n"
+	.string "stalten, wer die schönsten Dinge hat.$"
 
 SecretBase_RedCave1_Text_1A2830:: @ 81A2830
-	.string "I found a spot I liked, and I did it up\n"
-	.string "with my favorite decorations.\p"
-	.string "I raise my favorite POKéMON and grow\n"
-	.string "stronger with it.\p"
-	.string "That's what I do.\n"
-	.string "Want to battle with me?$"
+	.string "Ich habe einen Ort gefunden, der mir\n"
+	.string "gefällt und den ich mit meinen Lieblings-\l"
+	.string "dekorationen ausgestattet habe.\p"
+	.string "Dort ziehe ich meine Lieblings-POKéMON\n"
+	.string "auf und werde mit ihnen stärker.\p"
+	.string "Genau das mache ich.\n"
+	.string "Möchtest du mit mir kämpfen?$"
 
 SecretBase_RedCave1_Text_1A28D7:: @ 81A28D7
-	.string "Show me what you're made of!$"
+	.string "Zeig mir, aus welchem Holz du\n"
+	.string "geschnitzt bist.$"
 
 SecretBase_RedCave1_Text_1A28F4:: @ 81A28F4
-	.string "I guess there are times when you're not\n"
-	.string "into it.$"
+	.string "Ich glaube, es gibt immer wieder Zeiten,\n"
+	.string "in denen man nicht so gut drauf ist.$"
 
 UnknownString_81A2925:: @ 81A2925
-	.string "I know exactly what you're made of now.$"
+	.string "Ich weiß jetzt genau, aus welchem Holz\n"
+	.string "du geschnitzt bist.$"
 
 SecretBase_RedCave1_Text_1A294D:: @ 81A294D
-	.string "We can both become stronger.\n"
-	.string "Let's keep at it!$"
+	.string "Wir können beide noch stärker werden!\n"
+	.string "Das macht doch Mut!$"
 
 SecretBase_RedCave1_Text_1A297C:: @ 81A297C
-	.string "I found a spot I liked, and I did it up\n"
-	.string "with my favorite decorations.\p"
-	.string "I raise my favorite POKéMON and grow\n"
-	.string "stronger with it.\p"
-	.string "Every day is a great day.$"
+	.string "Ich habe einen Ort gefunden, der mir\n"
+	.string "gefällt und den ich mit meinen Lieblings-\l"
+	.string "dekorationen ausgestattet habe.\p"
+	.string "Dort ziehe ich meine Lieblings-POKéMON\n"
+	.string "auf und werde mit ihnen stärker.\p"
+	.string "Jeder Tag ist mein Lieblingstag.$"
 
 SecretBase_RedCave1_Text_1A2A13:: @ 81A2A13
-	.string "You can learn a lot about the taste\n"
-	.string "and sense of people by the kinds of\l"
-	.string "decorations they have, and how they\l"
-	.string "display them.\p"
-	.string "What do you think of my taste?\n"
-	.string "Are you speechless?\p"
-	.string "Want to see my taste in battling?$"
+	.string "Man lernt viel über den Geschmack und\n"
+	.string "den Stil von Menschen, wenn man sich\l"
+	.string "ihre Dekorationen und den Platz, auf\l"
+	.string "dem sie stehen, anschaut.\p"
+	.string "Wie findest du meinen Geschmack?\n"
+	.string "Bist du sprachlos? Hihihi...\p"
+	.string "Willst du mal meinen Kampfstil sehen?$"
 
 SecretBase_RedCave1_Text_1A2AE2:: @ 81A2AE2
-	.string "There's no holding back!$"
+	.string "Es gibt kein Zurück mehr.$"
 
 SecretBase_RedCave1_Text_1A2AFB:: @ 81A2AFB
-	.string "I'll be happy to demonstrate my style\n"
-	.string "anytime.$"
+	.string "Ich zeige dir gerne jederzeit wieder \n"
+	.string "meinen erlesenen Kampfstil!$"
 
 UnknownString_81A2B2A:: @ 81A2B2A
-	.string "You're supremely talented!\n"
-	.string "Your power seems to be limitless...$"
+	.string "Du bist hoch talentiert! Deine Stärke\n"
+	.string "scheint grenzenlos zu sein.$"
 
 SecretBase_RedCave1_Text_1A2B69:: @ 81A2B69
-	.string "What did you think of my style?\n"
-	.string "I'll keep on polishing it!$"
+	.string "Was hältst du von meinem Stil?\n"
+	.string "Ich muss ihn noch mehr aufpolieren.$"
 
 SecretBase_RedCave1_Text_1A2BA4:: @ 81A2BA4
-	.string "You can learn a lot about the taste\n"
-	.string "and sense of people by the kinds of\l"
-	.string "decorations they have, and how they\l"
-	.string "display them.\p"
-	.string "What do you think of my taste?\n"
-	.string "Are you speechless?$"
+	.string "Man lernt viel über den Geschmack und\n"
+	.string "den Stil von Menschen, wenn man sich\l"
+	.string "ihre Dekorationen und den Platz, auf\l"
+	.string "dem sie stehen, anschaut.\p"
+	.string "Wie findest du meinen Geschmack?\n"
+	.string "Bist du sprachlos? Hihihi...$"

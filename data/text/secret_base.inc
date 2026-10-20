@@ -1,64 +1,75 @@
 SecretBase_Text_AllDecorationsWillBeReturned: @ 81A38FB
-	.string "All decorations and furniture in your\n"
-	.string "SECRET BASE will be returned to your PC.\p"
-	.string "Is that okay?$"
+	.string "Alle Dekorationsgegenstände und das\n"
+	.string "Mobiliar aus deiner GEHEIMBASIS werden\l"
+	.string "auf deinen PC gesendet.\p"
+	.string "Einverstanden?$"
 
 SecretBase_Text_WantToRegisterSecretBase: @ 81A3958
-	.string "Do you want to register\n"
-	.string "{STR_VAR_1}'s SECRET BASE?$"
+	.string "Möchtest du GEHEIMBASIS von\n"
+	.string "{STR_VAR_1} eintragen?$"
 
 SecretBase_Text_AlreadyRegisteredDelete: @ 81A3982
-	.string "This data is already registered.\n"
-	.string "Would you like to delete it?$"
+	.string "Diese Daten wurden bereits\n"
+	.string "eingetragen. Möchtest du sie löschen?$"
 
 SecretBase_Text_TooManyBasesDeleteSome: @ 81A39C0
-	.string "Up to 10 locations can be registered.\p"
-	.string "Delete a location if you want to\n"
-	.string "register another location.$"
+	.string "Bis zu 10 Orte können eingetragen\n"
+	.string "werden.\p"
+	.string "Lösche einen Ort, um einen neuen\n"
+	.string "eintragen zu können.$"
 
 SecretBase_Text_RegistrationCompleted: @ 81A3A22
-	.string "Registration completed.$"
+	.string "Registrierung abgeschlossen.$"
 
 SecretBase_Text_DataUnregistered: @ 81A3A3A
-	.string "Data has been unregistered.$"
+	.string "Daten wurden aus der Registrierung\n"
+	.string "genommen.$"
 
 UnknownString_81A3A56: @ 81A3A56
-	.string "There are no decorations...$"
+	.string "Es sind keine Dekorationen vorhanden.$"
 
 SecretBase_Text_BootUpPC: @ 81A3A72
-	.string "{PLAYER} booted up the PC.$"
+	.string "{PLAYER} schaltet den PC ein.$"
 
 SecretBase_Text_WhatWouldYouLikeToDo: @ 81A3A87
-	.string "What would you like to do?$"
+	.string "Was möchtest du tun?$"
 
 SecretBase_Text_RegistryInfo: @ 81A3AA2
-	.string "The registered SECRET BASE will remain\n"
-	.string "unless the owner moves away.\p"
-	.string "If it is removed from the registry,\n"
-	.string "another SECRET BASE may take its place.\p"
-	.string "Up to ten locations can be registered.{PAUSE_UNTIL_PRESS}$"
+	.string "Die eingetragene GEHEIMBASIS bleibt\n"
+	.string "erhalten, bis der Eigentümer umzieht.\p"
+	.string "Wird sie aus dem Grundbuch ent-\n"
+	.string "fernt, kann eine andere GEHEIMBASIS\l"
+	.string "diesen Platz einnehmen.\p"
+	.string "Bis zu 10 Orte können eingetragen\n"
+	.string "werden.{0xFC}Ì$"
 
 SecretBase_Text_BattleTowerShield: @ 81A3B5B
-	.string "A shield of {STR_VAR_2} that marks winning\n"
-	.string "{STR_VAR_1} times in a row at the BATTLE TOWER.$"
+	.string "Ein Schild aus {STR_VAR_2}, welches zeigt,\n"
+	.string "dass {STR_VAR_1}-mal hintereinander im\l"
+	.string "DUELLTURM ein Kampf gewonnen wurde.$"
 
 SecretBase_Text_ToyTV: @ 81A3BA4
-	.string "A realistic toy TV. It could be easily\n"
-	.string "mistaken for the real thing.$"
+	.string "Ein sehr realistischer Spielzeug-\n"
+	.string "Fernseher. Man könnte ihn glatt mit\l"
+	.string "einem echten Gerät verwechseln.$"
 
 SecretBase_Text_SeedotTV: @ 81A3BE8
-	.string "A toy TV shaped like a SEEDOT.\n"
-	.string "It looks ready to roll away on its own...$"
+	.string "Ein Spielzeug-Fernseher, der aussieht\n"
+	.string "wie ein SAMURZEL. Er scheint von\l"
+	.string "alleine davonrollen zu wollen...$"
 
 SecretBase_Text_SkittyTV: @ 81A3C31
-	.string "A toy TV shaped like a SKITTY.\n"
-	.string "It looks ready to stroll away...$"
+	.string "Ein Spielzeug-Fernseher, der aussieht\n"
+	.string "wie ein ENECO. Es scheint, als wolle\l"
+	.string "er sich langsam davonschleichen ...$"
 
 UnknownString_81A3C71: @ 81A3C71
-	.string "You may only make one SECRET BASE.\p"
-	.string "Would you like to move from the SECRET\n"
-	.string "BASE near {STR_VAR_1}?$"
+	.string "Du kannst dir nur eine GEHEIMBASIS\n"
+	.string "einrichten.\p"
+	.string "Möchtest du deine GEHEIMBASIS in der\n"
+	.string "Nähe von {STR_VAR_1} hierher\l"
+	.string "verlegen?$"
 
 UnknownString_81A3CC9: @ 81A3CC9
-	.string "Moving completed.\p"
-	.string "Would you like to use the SECRET POWER?$"
+	.string "Umzug wurde abgeschlossen.\p"
+	.string "Möchtest du GEHEIMPOWER einsetzen?$"

@@ -682,19 +682,20 @@ gStdScripts_End::
 	.include "data/maps/Route110_TrickHouseEntrance/text.inc"
 
 Route110_TrickHousePuzzle1_Text_FoundAScroll:: @ 819C1B8
-	.string "{PLAYER} found a scroll.$"
+	.string "{PLAYER} findet eine Schriftrolle.$"
 
 Route110_TrickHousePuzzle1_Text_MemorizedTheCode:: @ 819C1CB
-	.string "{PLAYER} memorized the secret code\n"
-	.string "written on the scroll.$"
+	.string "{PLAYER} lernt den geheimen Code, der\n"
+	.string "auf der Schriftrolle steht, auswendig.$"
 
 Route110_TrickHousePuzzle1_Text_SecretCodeOnIt:: @ 819C1FF
-	.string "A secret code is written on it.$"
+	.string "Dort steht ein geheimer Code.$"
 
 Route110_TrickHousePuzzle_Text_DoorLockedWriteSecretCodeHere: @ 819C21F
-	.string "The door is locked.\p"
-	.string "...On closer inspection, this is written\n"
-	.string "on it: “Write the secret code here.”$"
+	.string "Die Tür ist verschlossen.\p"
+	.string "Bei näherer Betrachtung findet sich\n"
+	.string "ein Hinweis. “Schreibe hier den\l"
+	.string "geheimen Code auf.”$"
 
 	.include "data/maps/Route110_TrickHouseEnd/text.inc"
 	.include "data/maps/Route110_TrickHousePuzzle1/text.inc"
@@ -991,148 +992,157 @@ Common_EventScript_PlayerHandedOverTheItem:: @ 81A067F
 	.include "data/text/obtain_item.inc"
 
 Text_PokemartSign:: @ 81A0D41
-	.string "“Selected items for your convenience!”\n"
-	.string "POKéMON MART$"
+	.string "“Ausgewählte Items für Ihren\n"
+	.string "Gebrauch!”\l"
+	.string "POKéMON-SUPERMARKT$"
 
 Text_PokemonCenterSign:: @ 81A0D75
-	.string "“Rejuvenate your tired partners!”\n"
-	.string "POKéMON CENTER$"
+	.string "“Erfrische deine müden Partner!”\n"
+	.string "POKéMON-CENTER$"
 
 UnknownString_81A0DA6: @ 81A0DA6
-	.string "Fufufu...$"
+	.string "Hahaha...$"
 
 UnknownString_81A0DB0: @ 81A0DB0
-	.string "Mumble, mumble...$"
+	.string "Murmel... Murmel...$"
 
 UnknownString_81A0DC2: @ 81A0DC2
 	.string "Oh!$"
 
 UnknownString_81A0DC6: @ 81A0DC6
-	.string "Closed today!$"
+	.string "Heute geschlossen!$"
 
 UnknownString_81A0DD4: @ 81A0DD4
-	.string "You like the {STR_VAR_3}-type POKéMON\n"
-	.string "{STR_VAR_1}?$"
+	.string "Magst du {STR_VAR_3}-POKéMON, {STR_VAR_1}?$"
 
 UnknownString_81A0DF5: @ 81A0DF5
-	.string "It contains a POKéMON!$"
+	.string "Er enthält ein POKéMON.$"
 
 UnknownString_81A0E0C: @ 81A0E0C
-	.string "We're making preparations.$"
+	.string "Wir treffen Vorbereitungen.$"
 
 UnknownString_81A0E27: @ 81A0E27
-	.string "I'm a pseudo-GYM LEADER for\n"
-	.string "interviews.$"
+	.string "Ich bin ein Pseudo-ARENALEITER für\n"
+	.string "Interviews.$"
 
 UnknownString_81A0E4F: @ 81A0E4F
-	.string "Ready for a test battle.$"
+	.string "Bereit für einen Testkampf.$"
 
 UnknownString_81A0E68: @ 81A0E68
-	.string "{STR_VAR_1} might like this program.\n"
+	.string "{STR_VAR_1} würde dieses Programm gefallen.\p"
 	.string "... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ...\p"
-	.string "Better get going!$"
+	.string "Ich beeile mich besser!$"
 
 UnknownString_81A0ED6: @ 81A0ED6
-	.string "What should I do for fun today?$"
+	.string "Womit soll ich mir die Zeit vertreiben?$"
 
 LilycoveCity_DepartmentStoreElevator_Text_WhichFloorWouldYouLike:: @ 81A0EF6
-	.string "Welcome to LILYCOVE DEPARTMENT STORE.\p"
-	.string "Which floor would you like?$"
+	.string "Willkommen im SEEGRASULB CITY\n"
+	.string "EINKAUFSZENTRUM.\p"
+	.string "In welches Stockwerk möchtest du?$"
 
 UnknownString_81A0F38: @ 81A0F38
-	.string "Warp to BATTLE TOWER.$"
+	.string "Zum DUELLTURM warpen.$"
 
 UnknownString_81A0F4E: @ 81A0F4E
-	.string "Warp to LILYCOVE.$"
+	.string "Nach SEEGRASULB CITY warpen.$"
 
 UnknownString_81A0F60: @ 81A0F60
-	.string "The time is {STR_VAR_1}!$"
+	.string "Es ist {STR_VAR_1} Uhr.$"
 
 UnknownString_81A0F70: @ 81A0F70
-	.string "The HALL OF FAME will be accessed.$"
+	.string "Zugang zur RUHMESHALLE genehmigt.$"
 
 Route111_Text_1A0F93:: @ 81A0F93
-	.string "The sandstorm is vicious.\n"
-	.string "It's impossible to keep going.$"
+	.string "Der Sandsturm ist zu stark.\n"
+	.string "Dagegen kann man nicht angehen!$"
 
 Text_NoRegisteredItem: @ 81A0FCC
-	.string "An item in the BAG can be registered\n"
-	.string "on SELECT for convenience.$"
+	.string "Ein Basis-Item aus dem BEUTEL kann auf\n"
+	.string "SELECT gelegt werden. Sehr praktisch!$"
 
 gText_PokemonTrainerSchoolEmail:: @ 81A100C
-	.string "There's an e-mail from POKéMON TRAINER\n"
-	.string "SCHOOL.\p"
+gText_PokemonTrainerSchoolEmail:: @ 81A100C
+	.string "Da ist eine E-Mail von der POKéMON\n"
+	.string "TRAINERSCHULE.\p"
 	.string "... ... ... ... ... ...\p"
-	.string "A POKéMON may learn up to four moves.\p"
-	.string "A TRAINER's expertise is tested on the\n"
-	.string "move sets chosen for POKéMON.\p"
+	.string "Ein POKéMON kann bis zu vier Attacken\n"
+	.string "lernen.\p"
+	.string "Die Fähigkeiten eines TRAINERS werden\n"
+	.string "durch die Attacken, die er seinen\l"
+	.string "POKéMON beibringt, erprobt.\p"
 	.string "... ... ... ... ... ...$"
 
 gText_PlayerHouseBootPC:: @ 81A10D6
-	.string "{PLAYER} booted up the PC.$"
+gText_PlayerHouseBootPC:: @ 81A10D6
+	.string "{PLAYER} schaltet den PC ein.$"
 
 FallarborTown_ContestLobby_Text_1A10EB:: @ 81A10EB
-	.string "The link was canceled.$"
+	.string "Die Verbindung wurde abgebrochen.$"
 
 gText_NicknameReceivedPokemon:: @ 81A1102
-	.string "Want to give a nickname to the\n"
-	.string "{STR_VAR_2} you received?$"
+gText_NicknameReceivedPokemon:: @ 81A1102
+	.string "Möchtest du {STR_VAR_2} einen\n"
+	.string "Kosenamen geben?$"
 
 fieldPoisonText_PokemonFainted:: @ 81A1132
-	.string "{STR_VAR_1} fainted...\p$"
+	.string "{STR_VAR_1} wurde besiegt...\p"
+	.string "$"
 
 UnknownString_81A1141: @ 81A1141
-	.string "{PLAYER} is out of useable POKéMON!\p"
-	.string "{PLAYER} whited out!$"
+	.string "{PLAYER} hat kein kampffähiges POKéMON\n"
+	.string "mehr!\p"
+	.string "{PLAYER} wird ohnmächtig!$"
 
 gText_ComeBackWithSecretPower:: @ 81A116E
-	.string "Do you know the TM SECRET POWER?\p"
-	.string "Our group, we love the TM SECRET\n"
-	.string "POWER.\p"
-	.string "One of our members will give it to you.\n"
-	.string "Come back and show me if you get it.\p"
-	.string "We'll accept you as a member and sell\n"
-	.string "you good stuff in secrecy.$"
+	.string "Kennst du die TM GEHEIMPOWER?\p"
+	.string "In unserer Gruppe mögen alle die TM\n"
+	.string "GEHEIMPOWER.\p"
+	.string "Eines unserer Mitglieder wird sie dir\n"
+	.string "geben. Sag mir, wenn du sie hast.\p"
+	.string "Wir werden dich dann als Mitglied auf-\n"
+	.string "nehmen und dir unter der Hand tolle\l"
+	.string "Sachen verkaufen.$"
 
 gText_NurseJoy_OkayIllTakeYourPokemon:: @ 81A1245
-	.string "Okay, I'll take your POKéMON for a\n"
-	.string "few seconds.$"
+	.string "Okay, ich nehme deine POKéMON für einen\n"
+	.string "Moment in meine Obhut.$"
 
 gText_NurseJoy_Pokerus:: @ 81A1275
-	.string "Your POKéMON may be infected with\n"
-	.string "POKéRUS.\p"
-	.string "Little is known about the POKéRUS\n"
-	.string "except that they are microscopic life-\l"
-	.string "forms that attach to POKéMON.\p"
-	.string "While infected, POKéMON are said to\n"
-	.string "grow exceptionally well.$"
+	.string "Dein POKéMON scheint von dem\n"
+	.string "POKéRUS befallen zu sein.\p"
+	.string "Über den POKéRUS ist bisher wenig be-\n"
+	.string "kannt, außer dass es Mikroorganismen\l"
+	.string "sind, die POKéMON befallen.\p"
+	.string "Sind deine POKéMON infiziert, wachsen\n"
+	.string "sie besonders gut.$"
 
 	.include "data/text/surf.inc"
 
 SealedChamber_InnerRoom_Text_1A138B:: @ 81A138B
-	.string "It sounded as if a door opened\n"
-	.string "somewhere far away.$"
+	.string "Das hörte sich an, als würde irgendwo\n"
+	.string "eine Tür geöffnet.$"
 
 AncientTomb_Text_1A13BE:: @ 81A13BE
 DesertRuins_Text_1A13BE:: @ 81A13BE
 IslandCave_Text_1A13BE:: @ 81A13BE
 SealedChamber_OuterRoom_Text_1A13BE:: @ 81A13BE
-	.string "There is a big hole in the wall.$"
+	.string "In der Wand ist ein großes Loch.$"
 
 OldaleTown_PokemonCenter_2F_Text_1A13DF:: @ 81A13DF
-	.string "I'm terribly sorry. The COLOSSEUM\n"
-	.string "is undergoing adjustments.$"
+	.string "Tut mir schrecklich Leid. Das KOLOSSEUM\n"
+	.string "wird gerade renoviert.$"
 
 OldaleTown_PokemonCenter_2F_Text_1A141C:: @ 81A141C
-	.string "I'm terribly sorry. The TRADE CENTER\n"
-	.string "is undergoing inspections.$"
+	.string "Tut mir schrecklich Leid. Das\n"
+	.string "HANDELSCENTER wird gerade renoviert.$"
 
 OldaleTown_PokemonCenter_2F_Text_1A145C:: @ 81A145C
-	.string "I'm terribly sorry. The RECORD CORNER\n"
-	.string "is under preparation.$"
+	.string "Tut mir schrecklich Leid. Hier wird\n"
+	.string "für den STATISTIKTAUSCH renoviert.$"
 
 FallarborTown_House1_Text_1A1498:: @ 81A1498
-	.string "{PLAYER} handed over the\n"
+	.string "{PLAYER} übergibt\n"
 	.string "{STR_VAR_1}.$"
 
 Event_NoRegisteredItem:: @ 81A14AF
@@ -1421,6 +1431,9 @@ FallarborTown_ContestLobby_EventScript_1AE17E:: @ 81AE17E
 	end
 
 LilycoveCity_ContestLobby_EventScript_TryShowContestReporter:: @ 81AE188
+LilycoveCity_ContestLobby_EventScript_TryShowContestReporter:: @ 81AE188
+LilycoveCity_ContestLobby_EventScript_TryShowContestReporter:: @ 81AE188
+LilycoveCity_ContestLobby_EventScript_TryShowContestReporter:: @ 81AE188
 	compare VAR_LINK_CONTEST_ROOM_STATE, 2
 	goto_if_ne LilycoveCity_ContestLobby_EventScript_DontShowContestReporter
 	setvar VAR_0x8005, 6
@@ -1585,7 +1598,7 @@ S_RepelWoreOff:: @ 81C33E6
 	end
 
 Text_RepelWoreOff: @ 81C33EF
-	.string "REPEL's effect wore off...$"
+	.string "SCHUTZ wirkt nicht mehr...$"
 
 	.include "data/scripts/safari_zone.inc"
 	.include "data/text/safari_zone.inc"

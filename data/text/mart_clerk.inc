@@ -1,15 +1,15 @@
 Text_HowMayIServeYou:: @ 81A0BE4
-	.string "Welcome!\p"
-	.string "How may I serve you?$"
+	.string "Willkommen!\p"
+	.string "Kann ich dir helfen?$"
 
 Text_PleaseComeAgain:: @ 81A0C02
-	.string "Please come again!$"
+	.string "Bitte komm bald wieder!$"
 
 @ Unused
 Text_DiscountSaleToday: @ 81A0C15
-	.string "Welcome!\p"
-	.string "We're having a discount sale today!$"
+	.string "Willkommen!\p"
+	.string "Wir bieten heute Sonderangebote an!$"
 
 Text_PlayerWhatCanIDoForYou:: @ 81A0C42
-	.string "{PLAYER}{KUN}, welcome!\p"
-	.string "What can I do for you?$"
+	.string "{PLAYER}{KUN}, willkommen!\p"
+	.string "Wie kann ich dir behilflich sein?$"
