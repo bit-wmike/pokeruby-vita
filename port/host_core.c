@@ -183,6 +183,10 @@ static void HostRunFrame(void)
 
     HostAudio_Frame();
     CheckFlash();
+    {
+        void PortTest_Frame(void);
+        PortTest_Frame();
+    }
     sFrameCounter++;
 }
 

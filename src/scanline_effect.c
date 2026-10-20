@@ -71,6 +71,12 @@ void ScanlineEffect_SetParams(struct ScanlineEffectParams params)
 
     gScanlineEffect.dmaControl = params.dmaControl;
     gScanlineEffect.dmaDest    = params.dmaDest;
+#ifdef PORT
+    // Host / PS Vita port: parameter tables from the assembly data carry the
+    // GBA register address; the registers are an array here.
+    if ((uintptr_t)params.dmaDest - 0x04000000u < 0x400u)
+        gScanlineEffect.dmaDest = (void *)(REG_BASE + ((uintptr_t)params.dmaDest - 0x04000000u));
+#endif
     gScanlineEffect.state      = params.initState;
     gScanlineEffect.unused16   = params.unused9;
     gScanlineEffect.unused17   = params.unused9;

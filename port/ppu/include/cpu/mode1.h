@@ -43,6 +43,7 @@ extern int16_t virtuappu_mode1_obj_base_x[128];
 extern int16_t virtuappu_mode1_obj_base_y[128];
 /* Source GBA scanline = output line - line_dy (wide view shifted down). */
 extern int virtuappu_mode1_line_dy;
+extern uint32_t virtuappu_mode1_backdrop_key;
 /* Pokémon port: per-BG screen map override (VRAM offset, 64x64 tiles) and
  * clip rectangles (pixels outside are transparent for that BG). */
 extern uint32_t virtuappu_mode1_bg_screen_override[4];

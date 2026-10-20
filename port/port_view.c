@@ -15,6 +15,7 @@
  * (src/event_object_movement.c). Everything that is not the overworld is
  * shown as the GBA screen at the same zoom.
  */
+#include <stdlib.h>
 #include "global.h"
 #include "main.h"
 
@@ -143,6 +144,18 @@ int PortView_BeginFrame(void)
     int i;
 
     Reset();
+#ifndef __vita__
+    {   /* host: PKR_KEY_BG3=1 hides BG3 and keys the backdrop (mock-ups) */
+        static int key = -1;
+        if (key < 0)
+            key = getenv("PKR_KEY_BG3") != NULL;
+        virtuappu_mode1_backdrop_key = 0;
+        if (key && !sSnap.valid) {
+            virtuappu_mode1_backdrop_key = 0xFFFF00FFu;
+            virtuappu_mode1_bg_clip_on[3] = 1;
+        }
+    }
+#endif
     if (!sSnap.valid)
         return 0;
 

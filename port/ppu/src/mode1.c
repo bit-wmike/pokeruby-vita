@@ -52,6 +52,10 @@ int16_t virtuappu_mode1_obj_dy[128];
 int16_t virtuappu_mode1_obj_base_x[128];
 int16_t virtuappu_mode1_obj_base_y[128];
 int virtuappu_mode1_line_dy;
+/* Pokémon port: backdrop drawn as this key colour (0 = off), so the port
+ * can put its own picture behind the GBA layers. */
+uint32_t virtuappu_mode1_backdrop_key;
+static uint32_t mode1_backdrop_key_last;
 
 /* Window edges in GBA-screen coordinates -> wide frame coordinates. */
 static inline void mode1_port_window(int* left, int* right, int* top, int* bottom) {
@@ -675,7 +679,7 @@ static void virtuappu_mode1_publish_palette_luts(void) {
     }
     const bool correction_changed =
         !mode1_palette_source_initialized || mode1_palette_source_color_correction != mode1_color_correction;
-    const bool bg_changed = correction_changed || memcmp(mode1_bg_palette_source_cache, mode1_memory.bg_palette,
+    const bool bg_changed = correction_changed || mode1_backdrop_key_last != virtuappu_mode1_backdrop_key || memcmp(mode1_bg_palette_source_cache, mode1_memory.bg_palette,
                                    sizeof(mode1_bg_palette_source_cache)) != 0;
     const bool obj_changed = correction_changed || memcmp(mode1_obj_palette_source_cache, mode1_memory.obj_palette,
                                     sizeof(mode1_obj_palette_source_cache)) != 0;
@@ -684,6 +688,9 @@ static void virtuappu_mode1_publish_palette_luts(void) {
         for (int i = 0; i < MODE1_PALETTE_COLORS; ++i) {
             mode1_bg_abgr_lut[i] = virtuappu_mode1_rgb555_to_abgr8888(mode1_memory.bg_palette[i]);
         }
+        if (virtuappu_mode1_backdrop_key)
+            mode1_bg_abgr_lut[0] = virtuappu_mode1_backdrop_key;
+        mode1_backdrop_key_last = virtuappu_mode1_backdrop_key;
         mode1_bg_abgr_lut1[0] = mode1_bg_abgr_lut[0];
         memcpy(&mode1_bg_abgr_lut1[1], mode1_bg_abgr_lut, sizeof(mode1_bg_abgr_lut));
         memcpy(mode1_bg_palette_source_cache, mode1_memory.bg_palette, sizeof(mode1_bg_palette_source_cache));
