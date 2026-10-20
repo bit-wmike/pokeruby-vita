@@ -351,6 +351,24 @@ void BuildOamBuffer(void)
     sShouldProcessSpriteCopyRequests = TRUE;
 }
 
+#ifdef PORT
+// Host / PS Vita port, wide view: the full screen position of every OAM
+// entry (OAM itself only has 9 / 8 bits), staged with gMain.oamBuffer and
+// committed when it is copied to OAM.
+s16 gPortOamStagedX[128], gPortOamStagedY[128];
+s16 gPortOamX[128], gPortOamY[128];
+
+static s16 PortSpriteFullX(struct Sprite *sprite)
+{
+    return sprite->x + sprite->x2 + sprite->centerToCornerVecX + (sprite->coordOffsetEnabled ? gSpriteCoordOffsetX : 0);
+}
+
+static s16 PortSpriteFullY(struct Sprite *sprite)
+{
+    return sprite->y + sprite->y2 + sprite->centerToCornerVecY + (sprite->coordOffsetEnabled ? gSpriteCoordOffsetY : 0);
+}
+#endif
+
 static void UpdateOamCoords(void)
 {
     u8 i;
@@ -508,6 +526,11 @@ static void AddSpritesToOamBuffer(void)
     while (oamIndex < gOamLimit)
     {
         gMain.oamBuffer[oamIndex] = gDummyOamData;
+#ifdef PORT
+        // hidden on the GBA screen; keep it hidden in the wide view too
+        gPortOamStagedX[oamIndex] = -2000;
+        gPortOamStagedY[oamIndex] = -2000;
+#endif
         oamIndex++;
     }
 }
@@ -657,7 +680,13 @@ void ResetOamRange(u8 a, u8 b)
 void LoadOam(void)
 {
     if (!gMain.oamLoadDisabled)
+    {
         CpuCopy32(gMain.oamBuffer, (void *)OAM, sizeof(gMain.oamBuffer));
+#ifdef PORT
+        memcpy(gPortOamX, gPortOamStagedX, sizeof(gPortOamX));
+        memcpy(gPortOamY, gPortOamStagedY, sizeof(gPortOamY));
+#endif
+    }
 }
 
 static void ClearSpriteCopyRequests(void)
@@ -1716,6 +1745,10 @@ bool8 AddSpriteToOamBuffer(struct Sprite *sprite, u8 *oamIndex)
     if (!sprite->subspriteTables || sprite->subspriteMode == SUBSPRITES_OFF)
     {
         gMain.oamBuffer[*oamIndex] = sprite->oam;
+#ifdef PORT
+        gPortOamStagedX[*oamIndex] = PortSpriteFullX(sprite);
+        gPortOamStagedY[*oamIndex] = PortSpriteFullY(sprite);
+#endif
         (*oamIndex)++;
         return 0;
     }
@@ -1739,6 +1772,10 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
     if (!subspriteTable || !subspriteTable->subsprites)
     {
         *destOam = *oam;
+#ifdef PORT
+        gPortOamStagedX[*oamIndex] = PortSpriteFullX(sprite);
+        gPortOamStagedY[*oamIndex] = PortSpriteFullY(sprite);
+#endif
         (*oamIndex)++;
         return 0;
     }
@@ -1793,6 +1830,10 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
             destOam[i].size = subspriteTable->subsprites[i].size;
             destOam[i].x = (s16)baseX + (s16)x;
             destOam[i].y = baseY + y;
+#ifdef PORT
+            gPortOamStagedX[*oamIndex] = PortSpriteFullX(sprite) - sprite->centerToCornerVecX + (s16)x;
+            gPortOamStagedY[*oamIndex] = PortSpriteFullY(sprite) - sprite->centerToCornerVecY + (s16)y;
+#endif
             destOam[i].tileNum = tileNum + subspriteTable->subsprites[i].tileOffset;
 
             if (sprite->subspriteMode != SUBSPRITES_IGNORE_PRIORITY)

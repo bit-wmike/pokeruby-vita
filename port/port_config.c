@@ -5,11 +5,11 @@
 
 #include "port/port_config.h"
 
-struct PortConfig gPortConfig = {PORT_VIEW_GBA, PORT_STYLE_PIXEL, 0};
+struct PortConfig gPortConfig = {PORT_VIEW_FULL, PORT_STYLE_PIXEL, 0};
 
 static void Set(const char *key, int v)
 {
-    if (!strcmp(key, "view_mode") && v >= 0 && v <= 1)
+    if (!strcmp(key, "wide_view") && v >= 0 && v <= 1)
         gPortConfig.viewMode = v;
     else if (!strcmp(key, "display_style") && v >= 0 && v <= 2)
         gPortConfig.displayStyle = v;
@@ -22,8 +22,8 @@ void Port_ConfigLoad(void)
     char buf[1024];
     long n = Platform_ReadFile("settings.ini", buf, sizeof(buf) - 1);
     char *line;
-    if (n <= 0)
-        return;
+    const char *env = getenv("PKR_VIEW");
+    if (n > 0) {
     buf[n] = 0;
     for (line = strtok(buf, "\r\n"); line; line = strtok(NULL, "\r\n")) {
         char key[64];
@@ -31,6 +31,9 @@ void Port_ConfigLoad(void)
         if (sscanf(line, " %63[a-z_0-9] = %d", key, &v) == 2)
             Set(key, v);
     }
+    }
+    if (env) /* host build: PKR_VIEW=0/1 */
+        gPortConfig.viewMode = atoi(env) ? PORT_VIEW_FULL : PORT_VIEW_GBA;
 }
 
 void Port_ConfigSave(void)
@@ -38,7 +41,7 @@ void Port_ConfigSave(void)
     char buf[256];
     int n = snprintf(buf, sizeof(buf),
                      "# Pokemon Vita port settings\n"
-                     "view_mode = %d\n"
+                     "wide_view = %d\n"
                      "display_style = %d\n"
                      "frame_rate_30 = %d\n",
                      gPortConfig.viewMode, gPortConfig.displayStyle, gPortConfig.frameRate30);

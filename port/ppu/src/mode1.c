@@ -29,6 +29,20 @@
 
 virtuappu_mode1_pre_line_fn virtuappu_mode1_pre_line_callback = NULL;
 int virtuappu_mode1_bg_dx[4];
+/* Pokémon port: per-BG screen map override (offset into the bound VRAM,
+ * which the port makes larger than the GBA's 96 KiB) forcing a 64x64-tile
+ * map, and per-BG clip rectangles (outside: transparent). */
+uint32_t virtuappu_mode1_bg_screen_override[4];
+int virtuappu_mode1_bg_clip_on[4];
+int virtuappu_mode1_bg_clip_x0[4], virtuappu_mode1_bg_clip_x1[4];
+int virtuappu_mode1_bg_clip_y0[4], virtuappu_mode1_bg_clip_y1[4];
+static inline uint32_t mode1_screen_base(int bg, uint16_t bgcnt) {
+    return virtuappu_mode1_bg_screen_override[bg] ? virtuappu_mode1_bg_screen_override[bg]
+                                                  : (uint32_t)((bgcnt >> 8u) & 0x1Fu) * 0x800u;
+}
+static inline uint16_t mode1_size_flag(int bg, uint16_t bgcnt) {
+    return virtuappu_mode1_bg_screen_override[bg] ? 3u : (uint16_t)((bgcnt >> 14u) & 3u);
+}
 int virtuappu_mode1_bg_dy[4];
 int virtuappu_mode1_win_dx;
 int virtuappu_mode1_win_dy;
@@ -1050,8 +1064,8 @@ static inline void mode1_tile_tokens8_neon(uint16_t* dst, uint32_t packed_row, b
 static void mode1_render_text_bg_native_tokens_range(int bg_index, int line, uint16_t bgcnt, int dst_begin,
                                                      int dst_end, int dst_offset, uint16_t* tokens) {
     const uint32_t char_base = (uint32_t)((bgcnt >> 2u) & 3u) * 0x4000u;
-    const uint32_t screen_base = (uint32_t)((bgcnt >> 8u) & 0x1Fu) * 0x800u;
-    const uint16_t size_flag = (uint16_t)((bgcnt >> 14u) & 3u);
+    const uint32_t screen_base = mode1_screen_base(bg_index, bgcnt);
+    const uint16_t size_flag = mode1_size_flag(bg_index, bgcnt);
     const int map_width_tiles = (size_flag & 1u) != 0u ? 64 : 32;
     const int map_height_tiles = (size_flag & 2u) != 0u ? 64 : 32;
     const int scroll_x = (virtuappu_mode1_io_read16((uint16_t)(MODE1_IO_BG0HOFS + bg_index * 4)) + virtuappu_mode1_bg_dx[bg_index]) & 0x1FF;
@@ -1167,7 +1181,16 @@ static void mode1_render_text_bg_native_tokens(int bg_index, int line, uint16_t 
 
 static void mode1_render_text_bg_compact_tokens(int bg_index, int line, uint16_t bgcnt, int frame_width,
                                                 uint16_t* tokens) {
-    const uint16_t size_flag = (uint16_t)((bgcnt >> 14u) & 3u);
+    if (virtuappu_mode1_bg_clip_on[bg_index]) {
+        int x0 = virtuappu_mode1_bg_clip_x0[bg_index], x1 = virtuappu_mode1_bg_clip_x1[bg_index];
+        if (line < virtuappu_mode1_bg_clip_y0[bg_index] || line >= virtuappu_mode1_bg_clip_y1[bg_index])
+            return;
+        if (x1 > frame_width) x1 = frame_width;
+        if (x0 < x1)
+            mode1_render_text_bg_native_tokens_range(bg_index, line, bgcnt, x0, x1, 0, tokens);
+        return;
+    }
+    const uint16_t size_flag = mode1_size_flag(bg_index, bgcnt);
     const int map_width_tiles = (size_flag & 1u) != 0u ? 64 : 32;
     const int map_height_tiles = (size_flag & 2u) != 0u ? 64 : 32;
     int shadow_cols = 0;
@@ -1232,7 +1255,7 @@ static void mode1_render_text_bg_compact_tokens(int bg_index, int line, uint16_t
     }
 
     const uint32_t char_base = (uint32_t)((bgcnt >> 2u) & 3u) * 0x4000u;
-    const uint32_t screen_base = (uint32_t)((bgcnt >> 8u) & 0x1Fu) * 0x800u;
+    const uint32_t screen_base = mode1_screen_base(bg_index, bgcnt);
     const int scroll_x = (virtuappu_mode1_io_read16((uint16_t)(MODE1_IO_BG0HOFS + bg_index * 4)) + virtuappu_mode1_bg_dx[bg_index]) & 0x1FF;
     const int scroll_y = (virtuappu_mode1_io_read16((uint16_t)(MODE1_IO_BG0VOFS + bg_index * 4)) + virtuappu_mode1_bg_dy[bg_index]) & 0x1FF;
     const int sample_line = native_bounds ? line - native_top : line;
@@ -1343,8 +1366,8 @@ void virtuappu_mode1_render_text_bg_line(int bg_index, int line, uint32_t* line_
     uint32_t char_base = (uint32_t)((bgcnt >> 2u) & 3u) * 0x4000u;
     bool mosaic_on = ((bgcnt >> 6u) & 1u) != 0u;
     bool bpp8 = ((bgcnt >> 7u) & 1u) != 0u;
-    uint32_t screen_base = (uint32_t)((bgcnt >> 8u) & 0x1Fu) * 0x800u;
-    uint16_t size_flag = (uint16_t)((bgcnt >> 14u) & 3u);
+    uint32_t screen_base = mode1_screen_base(bg_index, bgcnt);
+    uint16_t size_flag = mode1_size_flag(bg_index, bgcnt);
     int map_width_tiles = (size_flag & 1u) ? 64 : 32;
     int map_height_tiles = (size_flag & 2u) ? 64 : 32;
     int scroll_x = (virtuappu_mode1_io_read16((uint16_t)(MODE1_IO_BG0HOFS + bg_index * 4)) + virtuappu_mode1_bg_dx[bg_index]) & 0x1FF;
@@ -1396,6 +1419,20 @@ void virtuappu_mode1_render_text_bg_line(int bg_index, int line, uint32_t* line_
         if (line < native_top || line >= native_bottom) return;
         render_min_x = native_left;
         render_max_x = native_right;
+    }
+    if (virtuappu_mode1_bg_clip_on[bg_index]) {
+        if (line < virtuappu_mode1_bg_clip_y0[bg_index] || line >= virtuappu_mode1_bg_clip_y1[bg_index])
+            return;
+        if (render_min_x < virtuappu_mode1_bg_clip_x0[bg_index]) render_min_x = virtuappu_mode1_bg_clip_x0[bg_index];
+        if (render_max_x > virtuappu_mode1_bg_clip_x1[bg_index]) render_max_x = virtuappu_mode1_bg_clip_x1[bg_index];
+        if (render_min_x >= render_max_x)
+            return;
+        if (MODE1_NATIVE_FAST_PATHS_ENABLED() && !bpp8 && !mosaic_on && !native_bounds) {
+            mode1_render_text_bg_native_4bpp_range(bg_index, char_base, screen_base, map_width_tiles, tile_row, pixel_y,
+                                                   scroll_x, render_min_x, render_max_x, 0, priority, line_buffer,
+                                                   priority_buffer);
+            return;
+        }
     }
     const int ws_shadow_base = virtuappu_mode1_ws_shadow_base_tile[bg_index];
     uint16_t* const ws_shadow = virtuappu_mode1_ws_shadow[bg_index];

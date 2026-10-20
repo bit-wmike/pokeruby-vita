@@ -1,4 +1,18 @@
 #include "global.h"
+#ifdef PORT
+// Host / PS Vita port, wide view: how far beyond the GBA screen the
+// overworld is shown (port/port_view.c; 0 in the GBA view).
+extern int gPortViewExtraX, gPortViewExtraY;
+#define PORT_VIEW_EXTRA_PX_X gPortViewExtraX
+#define PORT_VIEW_EXTRA_PX_Y gPortViewExtraY
+#define PORT_VIEW_EXTRA_MT_X ((gPortViewExtraX + 15) / 16)
+#define PORT_VIEW_EXTRA_MT_Y ((gPortViewExtraY + 15) / 16)
+#else
+#define PORT_VIEW_EXTRA_PX_X 0
+#define PORT_VIEW_EXTRA_PX_Y 0
+#define PORT_VIEW_EXTRA_MT_X 0
+#define PORT_VIEW_EXTRA_MT_Y 0
+#endif
 #include "berry.h"
 #include "event_data.h"
 #include "event_object_movement.h"
@@ -1496,10 +1510,10 @@ void TrySpawnObjectEvents(s16 cameraDeltaX, s16 cameraDeltaY)
 
     if (gMapHeader.events != NULL)
     {
-        s16 left = gSaveBlock1.pos.x - 2;
-        s16 right = gSaveBlock1.pos.x + 17;
-        s16 top = gSaveBlock1.pos.y;
-        s16 bottom = gSaveBlock1.pos.y + 16;
+        s16 left = gSaveBlock1.pos.x - 2 - PORT_VIEW_EXTRA_MT_X;
+        s16 right = gSaveBlock1.pos.x + 17 + PORT_VIEW_EXTRA_MT_X;
+        s16 top = gSaveBlock1.pos.y - PORT_VIEW_EXTRA_MT_Y;
+        s16 bottom = gSaveBlock1.pos.y + 16 + PORT_VIEW_EXTRA_MT_Y;
         u8 objectCount = gMapHeader.events->objectEventCount;
 
         for (i = 0; i < objectCount; i++)
@@ -1539,10 +1553,10 @@ void RemoveObjectEventsOutsideView(void)
 
 static void RemoveObjectEventIfOutsideView(struct ObjectEvent *objectEvent)
 {
-    s16 left =   gSaveBlock1.pos.x - 2;
-    s16 right =  gSaveBlock1.pos.x + 17;
-    s16 top =    gSaveBlock1.pos.y;
-    s16 bottom = gSaveBlock1.pos.y + 16;
+    s16 left =   gSaveBlock1.pos.x - 2 - PORT_VIEW_EXTRA_MT_X;
+    s16 right =  gSaveBlock1.pos.x + 17 + PORT_VIEW_EXTRA_MT_X;
+    s16 top =    gSaveBlock1.pos.y - PORT_VIEW_EXTRA_MT_Y;
+    s16 bottom = gSaveBlock1.pos.y + 16 + PORT_VIEW_EXTRA_MT_Y;
 
     if (objectEvent->currentCoords.x >= left && objectEvent->currentCoords.x <= right
      && objectEvent->currentCoords.y >= top && objectEvent->currentCoords.y <= bottom)
@@ -7183,11 +7197,11 @@ static void UpdateObjectEventIsOffscreen(struct ObjectEvent *objectEvent, struct
 
     x2 = graphicsInfo->width + (s16)x;
     y2 = graphicsInfo->height + (s16)y;
-    if ((s16)x >= 0x100 || x2 < -0x10)
+    if ((s16)x >= 0x100 + PORT_VIEW_EXTRA_PX_X || x2 < -0x10 - PORT_VIEW_EXTRA_PX_X)
     {
         objectEvent->offScreen = TRUE;
     }
-    if ((s16)y >= 0xB0 || y2 < -0x10)
+    if ((s16)y >= 0xB0 + PORT_VIEW_EXTRA_PX_Y || y2 < -0x10 - PORT_VIEW_EXTRA_PX_Y)
     {
         objectEvent->offScreen = TRUE;
     }

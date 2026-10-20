@@ -43,6 +43,12 @@ extern int16_t virtuappu_mode1_obj_base_x[128];
 extern int16_t virtuappu_mode1_obj_base_y[128];
 /* Source GBA scanline = output line - line_dy (wide view shifted down). */
 extern int virtuappu_mode1_line_dy;
+/* Pokémon port: per-BG screen map override (VRAM offset, 64x64 tiles) and
+ * clip rectangles (pixels outside are transparent for that BG). */
+extern uint32_t virtuappu_mode1_bg_screen_override[4];
+extern int virtuappu_mode1_bg_clip_on[4];
+extern int virtuappu_mode1_bg_clip_x0[4], virtuappu_mode1_bg_clip_x1[4];
+extern int virtuappu_mode1_bg_clip_y0[4], virtuappu_mode1_bg_clip_y1[4];
 extern virtuappu_mode1_pre_line_fn virtuappu_mode1_pre_line_callback;
 
 /* PORT_WIDESCREEN_SPIKE: MODE1_GBA_WIDTH made overridable via
@@ -87,7 +93,7 @@ enum {
     MODE1_GBA_BG_COUNT = 4,
     MODE1_GBA_OAM_COUNT = 128,
     MODE1_IO_MEM_SIZE = 0x400,
-    MODE1_VRAM_SIZE = 0x18000,
+    MODE1_VRAM_SIZE = 0x1E000, /* Pokémon port: + wide-view maps */
     MODE1_PALETTE_COLORS = 256,
     MODE1_OAM_HALFWORDS = 512
 };

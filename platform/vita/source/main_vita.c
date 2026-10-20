@@ -294,12 +294,11 @@ static void AudioInit(void)
 
 /* ---------------------------------------------------- menu (START+SELECT) */
 
-/* MI_VIEW (Weitsicht) follows in 0.2.0 */
-enum { MI_STYLE, MI_FPS, MI_BACK, MI_COUNT, MI_VIEW };
+enum { MI_VIEW, MI_STYLE, MI_FPS, MI_BACK, MI_COUNT };
 
 static void MenuLine(int item, char *buf, size_t size)
 {
-    static const char *views[] = {"GBA (240x160)", "Weitsicht (480x272, ganzer Bildschirm)"};
+    static const char *views[] = {"GBA (240x160)", "Weitsicht (480x272)"};
     static const char *styles[] = {"Weich", "Scharf", "Pixelgenau"};
     switch (item) {
         case MI_VIEW: snprintf(buf, size, "Ansicht: %s", views[gPortConfig.viewMode]); break;

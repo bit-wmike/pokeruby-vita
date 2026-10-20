@@ -19,6 +19,7 @@
 #include "port/ppu/include/cpu/mode1.h"
 
 #include "port/port_config.h"
+#include "port/port_view.h"
 
 #include "global.h"
 #include "main.h"
@@ -113,7 +114,9 @@ static void RenderFrame(void)
     static int bound;
     PPUMemory ppu;
     u16 dispcnt = IO16(0x000);
-    int width = PORT_GBA_W, height = PORT_GBA_H;
+    int wide = PortView_BeginFrame();
+    int width = wide ? PORT_WIDE_W : PORT_GBA_W, height = wide ? PORT_WIDE_H : PORT_GBA_H;
+    int zoom = gPortConfig.viewMode == PORT_VIEW_FULL ? PORT_WIDE_H : PORT_GBA_H;
 
     if (!bound) {
         VirtuaPPUMode1GbaMemory mem = {
@@ -138,7 +141,7 @@ static void RenderFrame(void)
     Port_ProfileEnd(PORT_PROF_RENDER);
     sRendering = 0;
 
-    Platform_Present(sFrameBuffer, width, height, FRAME_MAX_W, height);
+    Platform_Present(sFrameBuffer, width, height, FRAME_MAX_W, zoom);
 }
 
 /* A frame that is not shown: the scanline timing (HBlank DMA and
@@ -175,6 +178,7 @@ static void HostRunFrame(void)
     keys = Platform_PollKeys();
     IO16(0x130) = (u16)(~keys & 0x3FF);
     RaiseIrq(INTR_FLAG_VBLANK);
+    PortView_VBlank();
     IO16(0x004) &= ~DISPSTAT_VBLANK;
 
     HostAudio_Frame();

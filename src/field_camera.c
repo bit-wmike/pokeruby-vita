@@ -508,3 +508,12 @@ static void CameraPanningCB_PanAhead(void)
         }
     }
 }
+
+#ifdef PORT
+// Host / PS Vita port, wide view: where the camera's tilemap ring starts.
+void PortFieldCameraTileOffset(u8 *xTile, u8 *yTile)
+{
+    *xTile = sFieldCameraOffset.xTileOffset;
+    *yTile = sFieldCameraOffset.yTileOffset;
+}
+#endif

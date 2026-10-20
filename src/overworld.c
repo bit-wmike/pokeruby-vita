@@ -1245,6 +1245,14 @@ static void OverworldBasic(void)
 }
 
 // This CB2 is used when starting
+#ifdef PORT
+// Host / PS Vita port, wide view: is the overworld running?
+int PortIsOverworld(void)
+{
+    return gMain.callback2 == CB2_Overworld || gMain.callback2 == CB2_OverworldBasic;
+}
+#endif
+
 void CB2_OverworldBasic(void)
 {
     OverworldBasic();

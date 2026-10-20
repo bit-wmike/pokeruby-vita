@@ -5,7 +5,7 @@ from the [pret/pokeruby](https://github.com/pret/pokeruby) decompilation (its RE
 `README-decomp.md`, setup: `INSTALL.md`). No emulator: the game's C
 code runs directly on the Vita.
 
-## Status (0.1.0)
+## Status (0.2.0)
 
 - German Sapphire runs on the host test build from the intro to the
   overworld, with music and sound; x86 and ARM builds produce bit-identical
@@ -13,7 +13,13 @@ code runs directly on the Vita.
 - PS Vita build: GBA view (240×160), display styles (smooth, sharp,
   pixel-exact), 30 fps option, START+SELECT menu, flash save in
   `ux0:data/pokemon_saphir/saphir.sav` (same format as emulator saves).
-- Next: "Weitsicht" – the overworld at 480×272 on the whole Vita screen.
+- "Weitsicht" (default): the overworld at 480×272 – the whole Vita screen at
+  exactly 2× – with the map, the connected maps and the people around you
+  really there (port/port_view.c). Text boxes and menus stay in the
+  middle; battles, menus and other scenes are the GBA screen at the same
+  zoom. Switch in the START+SELECT menu ("Ansicht").
+- Next: battle/menu presentation, weather at the edges, quick-save,
+  map overlay; Ruby.
 
 ## Building
 

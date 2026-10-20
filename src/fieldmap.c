@@ -848,3 +848,67 @@ void LoadMapTilesetPalettes(const struct MapLayout *mapLayout)
         LoadSecondaryTilesetPalette(mapLayout);
     }
 }
+
+#ifdef PORT
+// Host / PS Vita port, wide view: the metatile at backup-layout coordinates
+// (x, y) also beyond the backup layout's margin of MAP_OFFSET metatiles,
+// looked up in the connected maps (the game itself only copies MAP_OFFSET
+// metatiles of them). Elsewhere it is the border, as in MapGridGetMetatileIdAt.
+u32 PortMapGetMetatileIdWide(int x, int y)
+{
+    const struct MapLayout *layout = gMapHeader.mapLayout;
+    int mx = x - MAP_OFFSET, my = y - MAP_OFFSET;
+    int i;
+
+    if (AreCoordsWithinMapGridBounds(x, y) || gMapHeader.connections == NULL)
+        return MapGridGetMetatileIdAt(x, y);
+    for (i = 0; i < gMapHeader.connections->count; i++)
+    {
+        const struct MapConnection *c = &gMapHeader.connections->connections[i];
+        const struct MapHeader *h = GetMapHeaderFromConnection(c);
+        const struct MapLayout *l;
+        int nx, ny;
+        if (h == NULL)
+            continue;
+        l = h->mapLayout;
+        switch (c->direction)
+        {
+        case CONNECTION_SOUTH: nx = mx - (s32)c->offset; ny = my - layout->height; if (my < layout->height) continue; break;
+        case CONNECTION_NORTH: nx = mx - (s32)c->offset; ny = my + l->height; if (my >= 0) continue; break;
+        case CONNECTION_EAST:  nx = mx - layout->width; ny = my - (s32)c->offset; if (mx < layout->width) continue; break;
+        case CONNECTION_WEST:  nx = mx + l->width; ny = my - (s32)c->offset; if (mx >= 0) continue; break;
+        default: continue;
+        }
+        if (nx >= 0 && nx < l->width && ny >= 0 && ny < l->height)
+            return l->map[nx + ny * l->width] & MAPGRID_METATILE_ID_MASK;
+    }
+    return MapGridGetMetatileIdAt(x, y);
+}
+// The tilemap entries of the metatile at (x, y) for BG1, BG2 and BG3, laid out
+// like DrawMetatile in field_camera.c does (top-left, top-right, bottom-left,
+// bottom-right).
+void PortMetatileTilesWide(int x, int y, u16 *bg1, u16 *bg2, u16 *bg3)
+{
+    const struct MapLayout *layout = gMapHeader.mapLayout;
+    u16 id = PortMapGetMetatileIdWide(x, y);
+    const u16 *m;
+    int i, type;
+
+    if (id > NUM_METATILES_TOTAL)
+        id = 0;
+    type = (GetMetatileAttributesById(id) & METATILE_ATTR_LAYER_MASK) >> METATILE_ATTR_LAYER_SHIFT;
+    if (id < NUM_METATILES_IN_PRIMARY)
+        m = layout->primaryTileset->metatiles + id * 8;
+    else
+        m = layout->secondaryTileset->metatiles + (id - NUM_METATILES_IN_PRIMARY) * 8;
+    for (i = 0; i < 4; i++)
+    {
+        switch (type)
+        {
+        case 2:  bg3[i] = m[i]; bg2[i] = 0;        bg1[i] = m[4 + i]; break;
+        case 1:  bg3[i] = m[i]; bg2[i] = m[4 + i]; bg1[i] = 0;        break;
+        default: bg3[i] = 0x3014; bg2[i] = m[i];   bg1[i] = m[4 + i]; break;
+        }
+    }
+}
+#endif

@@ -12,6 +12,6 @@
 /* gHostEwram and gHostIwram are defined in the generated mem.s. */
 unsigned char gHostIo[0x400] ALIGN64;
 unsigned char gHostPalram[0x400] ALIGN64;
-unsigned char gHostVram[0x18000] ALIGN64;
+unsigned char gHostVram[0x1E000] ALIGN64;
 unsigned char gHostOam[0x400] ALIGN64;
 unsigned char gHostFlash[0x20000] ALIGN64;
