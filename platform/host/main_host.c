@@ -256,6 +256,10 @@ int main(void)
         }
     }
     OpenWav();
+    if (getenv("PKR_HOENN_SELFTEST")) {
+        void PortHoennSelfTest(void);
+        PortHoennSelfTest();
+    }
     Port_RunGame();
     return 0;
 }

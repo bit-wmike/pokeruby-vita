@@ -1,4 +1,5 @@
 #include "global.h"
+#include "port_hoenn.h"
 #include "battle_setup.h"
 #include "berry.h"
 #include "clock.h"
@@ -1741,6 +1742,9 @@ bool8 ScrCmd_setwildbattle(struct ScriptContext *ctx)
     u8 level = ScriptReadByte(ctx);
     u16 item = ScriptReadHalfword(ctx);
 
+#ifdef PORT
+    species = PortHoennSpecies(species, level, 0);
+#endif
     CreateScriptedWildMon(species, level, item);
     return FALSE;
 }

@@ -1,4 +1,5 @@
 #include "global.h"
+#include "port_hoenn.h"
 #include "constants/abilities.h"
 #include "constants/battle_move_effects.h"
 #include "constants/hold_effects.h"
@@ -1044,6 +1045,17 @@ void sub_800F838(struct Sprite *sprite)
     }
 }
 
+#ifdef PORT
+// "Nur Hoenn": ordinary trainers get real Hoenn Pokémon (with their own
+// level-up moves), bosses keep theirs and only look different.
+#define PORT_TRAINER_SPECIES(species, level) \
+    (PortHoennIsBoss(trainerNum, gTrainers[trainerNum].trainerClass) ? (species) \
+     : PortHoennSpecies(species, level, gTrainers[trainerNum].trainerClass))
+#define PORT_TRAINER_KEEPS_MOVES(species, level) (PORT_TRAINER_SPECIES(species, level) == (species))
+#else
+#define PORT_TRAINER_SPECIES(species, level) (species)
+#define PORT_TRAINER_KEEPS_MOVES(species, level) TRUE
+#endif
 u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
 {
     u32 nameHash = 0;
@@ -1055,6 +1067,9 @@ u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
     if ((gBattleTypeFlags & 0x908) == 8)
     {
         ZeroEnemyPartyMons();
+#ifdef PORT
+        PortHoennClearLooks();
+#endif
         for (i = 0; i < gTrainers[trainerNum].partySize; i++)
         {
             u32 personalityValue;
@@ -1081,7 +1096,7 @@ u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
                     nameHash += gSpeciesNames[partyData[i].species][j];
                 personalityValue += nameHash << 8;
                 fixedIV = partyData[i].iv * 31 / 255;
-                CreateMon(&party[i], partyData[i].species, partyData[i].level, fixedIV, TRUE, personalityValue, 2, 0);
+                CreateMon(&party[i], PORT_TRAINER_SPECIES(partyData[i].species, partyData[i].level), partyData[i].level, fixedIV, TRUE, personalityValue, 2, 0);
                 break;
             }
             case F_TRAINER_PARTY_CUSTOM_MOVESET:
@@ -1092,9 +1107,9 @@ u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
                     nameHash += gSpeciesNames[partyData[i].species][j];
                 personalityValue += nameHash << 8;
                 fixedIV = partyData[i].iv * 31 / 255;
-                CreateMon(&party[i], partyData[i].species, partyData[i].level, fixedIV, TRUE, personalityValue, 2, 0);
+                CreateMon(&party[i], PORT_TRAINER_SPECIES(partyData[i].species, partyData[i].level), partyData[i].level, fixedIV, TRUE, personalityValue, 2, 0);
 
-                for (j = 0; j < 4; j++)
+                for (j = 0; j < 4 && PORT_TRAINER_KEEPS_MOVES(partyData[i].species, partyData[i].level); j++)
                 {
                     SetMonData(&party[i], MON_DATA_MOVE1 + j, &partyData[i].moves[j]);
                     SetMonData(&party[i], MON_DATA_PP1 + j, &gBattleMoves[partyData[i].moves[j]].pp);
@@ -1109,7 +1124,7 @@ u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
                     nameHash += gSpeciesNames[partyData[i].species][j];
                 personalityValue += nameHash << 8;
                 fixedIV = partyData[i].iv * 31 / 255;
-                CreateMon(&party[i], partyData[i].species, partyData[i].level, fixedIV, TRUE, personalityValue, 2, 0);
+                CreateMon(&party[i], PORT_TRAINER_SPECIES(partyData[i].species, partyData[i].level), partyData[i].level, fixedIV, TRUE, personalityValue, 2, 0);
 
                 SetMonData(&party[i], MON_DATA_HELD_ITEM, &partyData[i].heldItem);
                 break;
@@ -1122,10 +1137,10 @@ u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
                     nameHash += gSpeciesNames[partyData[i].species][j];
                 personalityValue += nameHash << 8;
                 fixedIV = partyData[i].iv * 31 / 255;
-                CreateMon(&party[i], partyData[i].species, partyData[i].level, fixedIV, TRUE, personalityValue, 2, 0);
+                CreateMon(&party[i], PORT_TRAINER_SPECIES(partyData[i].species, partyData[i].level), partyData[i].level, fixedIV, TRUE, personalityValue, 2, 0);
 
                 SetMonData(&party[i], MON_DATA_HELD_ITEM, &partyData[i].heldItem);
-                for (j = 0; j < 4; j++)
+                for (j = 0; j < 4 && PORT_TRAINER_KEEPS_MOVES(partyData[i].species, partyData[i].level); j++)
                 {
                     SetMonData(&party[i], MON_DATA_MOVE1 + j, &partyData[i].moves[j]);
                     SetMonData(&party[i], MON_DATA_PP1 + j, &gBattleMoves[partyData[i].moves[j]].pp);
@@ -1133,6 +1148,14 @@ u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
                 break;
             }
             }
+#ifdef PORT
+            if (PortHoennIsBoss(trainerNum, gTrainers[trainerNum].trainerClass))
+            {
+                u16 look = PortHoennBossLook(trainerNum, GetMonData(&party[i], MON_DATA_SPECIES));
+                if (look != SPECIES_NONE)
+                    PortHoennSetLook(i, &party[i], look);
+            }
+#endif
         }
         gBattleTypeFlags |= gTrainers[trainerNum].doubleBattle;
     }
@@ -3126,7 +3149,7 @@ void sub_8010384(struct Sprite *sprite)
     if (gBattleSpriteInfo[r6].transformSpecies != 0)
         species = gBattleSpriteInfo[r6].transformSpecies;
     else
-        species = sprite->data[2];
+        species = PORT_BATTLER_LOOK(r6, sprite->data[2]);
 
     GetMonData(&gEnemyParty[gBattlerPartyIndexes[r6]], MON_DATA_PERSONALITY);  // Unused return value
 
@@ -3745,14 +3768,14 @@ void sub_8011384(void)
                 }
                 if (GetBattlerSide(gActiveBattler) == 1
                  && !(gBattleTypeFlags & (BATTLE_TYPE_EREADER_TRAINER | BATTLE_TYPE_BATTLE_TOWER | BATTLE_TYPE_LINK)))
-                    GetSetPokedexFlag(SpeciesToNationalPokedexNum(gBattleMons[gActiveBattler].species), 2);
+                    GetSetPokedexFlag(SpeciesToNationalPokedexNum(PORT_BATTLER_LOOK(gActiveBattler, gBattleMons[gActiveBattler].species)), 2);
             }
             else
             {
                 if (GetBattlerSide(gActiveBattler) == 1
                  && !(gBattleTypeFlags & (BATTLE_TYPE_EREADER_TRAINER | BATTLE_TYPE_BATTLE_TOWER | BATTLE_TYPE_LINK)))
                 {
-                    GetSetPokedexFlag(SpeciesToNationalPokedexNum(gBattleMons[gActiveBattler].species), 2);
+                    GetSetPokedexFlag(SpeciesToNationalPokedexNum(PORT_BATTLER_LOOK(gActiveBattler, gBattleMons[gActiveBattler].species)), 2);
                     BtlController_EmitLoadMonSprite(0);
                     MarkBattlerForControllerExec(gActiveBattler);
                 }
@@ -3903,7 +3926,7 @@ void bc_801362C(void)
         {
             if (GetBattlerSide(gActiveBattler) == 1
              && !(gBattleTypeFlags & (BATTLE_TYPE_EREADER_TRAINER | BATTLE_TYPE_BATTLE_TOWER | BATTLE_TYPE_LINK)))
-                GetSetPokedexFlag(SpeciesToNationalPokedexNum(gBattleMons[gActiveBattler].species), 2);
+                GetSetPokedexFlag(SpeciesToNationalPokedexNum(PORT_BATTLER_LOOK(gActiveBattler, gBattleMons[gActiveBattler].species)), 2);
         }
         gBattleMainFunc = sub_8011970;
     }

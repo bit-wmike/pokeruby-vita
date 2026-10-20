@@ -1,4 +1,5 @@
 #include "global.h"
+#include "port_hoenn.h"
 #include "name_string_util.h"
 #include "string_util.h"
 #include "text.h"
@@ -848,6 +849,12 @@ const union AffineAnimCmd *const gSpriteAffineAnimTable_8215AC0[] = {
     gSpriteAffineAnim_8215AB0
 };
 
+#ifdef PORT
+// "Nur Hoenn": the trades ask for / give the Hoenn counterparts
+#define PORT_TRADE_SPECIES(s) PortHoennSpecies(s, 50, 0)
+#else
+#define PORT_TRADE_SPECIES(s) (s)
+#endif
 const struct InGameTrade gIngameTrades[] = {
 #if ENGLISH
     {
@@ -4925,9 +4932,9 @@ static void sub_804D80C(struct Sprite *sprite)
 u16 GetInGameTradeSpeciesInfo(void)
 {
     const struct InGameTrade *inGameTrade = &gIngameTrades[gSpecialVar_0x8004];
-    StringCopy(gStringVar1, gSpeciesNames[inGameTrade->playerSpecies]);
-    StringCopy(gStringVar2, gSpeciesNames[inGameTrade->species]);
-    return inGameTrade->playerSpecies;
+    StringCopy(gStringVar1, gSpeciesNames[PORT_TRADE_SPECIES(inGameTrade->playerSpecies)]);
+    StringCopy(gStringVar2, gSpeciesNames[PORT_TRADE_SPECIES(inGameTrade->species)]);
+    return PORT_TRADE_SPECIES(inGameTrade->playerSpecies);
 }
 
 static void sub_804D8E4(void)
@@ -4936,7 +4943,7 @@ static void sub_804D8E4(void)
     const struct InGameTrade *inGameTrade = &gIngameTrades[gSpecialVar_0x8004];
     GetMonData(&gPlayerParty[gSpecialVar_0x8005], MON_DATA_NICKNAME, nickname);
     StringCopy10(gStringVar1, nickname);
-    StringCopy(gStringVar2, gSpeciesNames[inGameTrade->species]);
+    StringCopy(gStringVar2, gSpeciesNames[PORT_TRADE_SPECIES(inGameTrade->species)]);
 }
 
 static void _CreateInGameTradePokemon(u8 whichPlayerMon, u8 whichInGameTrade)
@@ -4949,7 +4956,7 @@ static void _CreateInGameTradePokemon(u8 whichPlayerMon, u8 whichInGameTrade)
     u8 isMail;
     struct Pokemon *pokemon = &gEnemyParty[0];
 
-    CreateMon(pokemon, inGameTrade->species, level, 32, TRUE, inGameTrade->personality, TRUE, inGameTrade->otId);
+    CreateMon(pokemon, PORT_TRADE_SPECIES(inGameTrade->species), level, 32, TRUE, inGameTrade->personality, TRUE, inGameTrade->otId);
 
     SetMonData(pokemon, MON_DATA_HP_IV, &inGameTrade->ivs[0]);
     SetMonData(pokemon, MON_DATA_ATK_IV, &inGameTrade->ivs[1]);
@@ -5005,7 +5012,7 @@ static void sub_804DAD4(struct MailStruct *mail, const struct InGameTrade *trade
     mail->trainerId[1] = trade->otId >> 16;
     mail->trainerId[2] = trade->otId >> 8;
     mail->trainerId[3] = trade->otId;
-    mail->species = trade->species;
+    mail->species = PORT_TRADE_SPECIES(trade->species);
     mail->itemId = trade->heldItem;
 }
 

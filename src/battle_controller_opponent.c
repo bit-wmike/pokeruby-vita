@@ -1,4 +1,5 @@
 #include "global.h"
+#include "port_hoenn.h"
 #include "battle.h"
 #include "battle_ai_script_commands.h"
 #include "battle_ai_switch_items.h"
@@ -1754,7 +1755,7 @@ void OpponentHandlecmd44(void)
 void OpponentHandleFaintingCry(void)
 {
     PlayCry_ByMode(
-      GetMonData(&gEnemyParty[gBattlerPartyIndexes[gActiveBattler]], MON_DATA_SPECIES),
+      PORT_LOOK(&gEnemyParty[gBattlerPartyIndexes[gActiveBattler]], GetMonData(&gEnemyParty[gBattlerPartyIndexes[gActiveBattler]], MON_DATA_SPECIES)),
       25, 5);
     OpponentBufferExecCompleted();
 }

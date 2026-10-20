@@ -1,4 +1,5 @@
 #include "global.h"
+#include "port_hoenn.h"
 #include "battle.h"
 #include "battle_anim.h"
 #include "battle_message.h"
@@ -4692,7 +4693,7 @@ static void atk4E_switchinanim(void)
     gActiveBattler = GetBattlerForBattleScript(T2_READ_8(gBattlescriptCurrInstr + 1));
     if (GetBattlerSide(gActiveBattler) == 1 && !(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_EREADER_TRAINER | BATTLE_TYPE_BATTLE_TOWER)))
     {
-        GetSetPokedexFlag(SpeciesToNationalPokedexNum(gBattleMons[gActiveBattler].species), 2);
+        GetSetPokedexFlag(SpeciesToNationalPokedexNum(PORT_BATTLER_LOOK(gActiveBattler, gBattleMons[gActiveBattler].species)), 2);
     }
     gAbsentBattlerFlags &= ~(gBitTable[gActiveBattler]);
     BtlController_EmitSwitchInAnim(0, gBattlerPartyIndexes[gActiveBattler], T2_READ_8(gBattlescriptCurrInstr + 2));

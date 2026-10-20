@@ -304,7 +304,7 @@ static void MenuLine(int item, char *buf, size_t size)
         case MI_VIEW: snprintf(buf, size, "Ansicht: %s", views[gPortConfig.viewMode]); break;
         case MI_STYLE: snprintf(buf, size, "Bilddarstellung: %s", styles[gPortConfig.displayStyle]); break;
         case MI_FPS: snprintf(buf, size, "Bildrate: %s", gPortConfig.frameRate30 ? "30 (Spieltempo bleibt)" : "60"); break;
-        case MI_HOENN: snprintf(buf, size, "Wilde Pokemon: %s", gPortConfig.gen3Wild ? "Nur Hoenn (3. Gen.)" : "Original"); break;
+        case MI_HOENN: snprintf(buf, size, "Pokemon: %s", gPortConfig.gen3Wild ? "Nur Hoenn (3. Gen.)" : "Original"); break;
         default: snprintf(buf, size, "Zurueck zum Spiel"); break;
     }
 }

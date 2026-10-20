@@ -1,4 +1,5 @@
 #include "global.h"
+#include "port_hoenn.h"
 #include "gba/m4a_internal.h"
 #include "battle.h"
 #include "battle_anim_special.h"
@@ -725,7 +726,7 @@ static void sub_8046C78(struct Sprite *sprite)
             cryPanning = -25;
         }
 
-        species = GetMonData(mon, MON_DATA_SPECIES);
+        species = PORT_LOOK(mon, GetMonData(mon, MON_DATA_SPECIES));
         if ((battler == GetBattlerAtPosition(0) || battler == GetBattlerAtPosition(1))
          && IsDoubleBattle() && gBattleAnimationInfo->unk9_0)
         {

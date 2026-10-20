@@ -1,4 +1,5 @@
 #include "global.h"
+#include "port_hoenn.h"
 #include "constants/hold_effects.h"
 #include "constants/items.h"
 #include "constants/moves.h"
@@ -1165,7 +1166,7 @@ void current_map_music_set__default_for_battle(u16 song)
 
 const u8 *GetMonSpritePal(struct Pokemon *mon)
 {
-    u16 species = GetMonData(mon, MON_DATA_SPECIES2, 0);
+    u16 species = PORT_LOOK(mon, GetMonData(mon, MON_DATA_SPECIES2, 0));
     u32 otId = GetMonData(mon, MON_DATA_OT_ID, 0);
     u32 personality = GetMonData(mon, MON_DATA_PERSONALITY, 0);
     return GetMonSpritePalFromOtIdPersonality(species, otId, personality);
@@ -1193,7 +1194,7 @@ const u8 *GetMonSpritePalFromOtIdPersonality(u16 species, u32 otId, u32 personal
 
 const struct CompressedSpritePalette *GetMonSpritePalStruct(struct Pokemon *mon)
 {
-    u16 species = GetMonData(mon, MON_DATA_SPECIES2, 0);
+    u16 species = PORT_LOOK(mon, GetMonData(mon, MON_DATA_SPECIES2, 0));
     u32 otId = GetMonData(mon, MON_DATA_OT_ID, 0);
     u32 personality = GetMonData(mon, MON_DATA_PERSONALITY, 0);
     return GetMonSpritePalStructFromOtIdPersonality(species, otId, personality);

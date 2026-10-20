@@ -1,4 +1,5 @@
 #include "global.h"
+#include "port_hoenn.h"
 #include "constants/battle_anim.h"
 #include "constants/species.h"
 #include "rom_8077ABC.h"
@@ -254,6 +255,7 @@ u8 sub_8077BFC(u8 slot, u16 species)
     }
     else
     {
+        species = PORT_BATTLER_LOOK(slot, species);
         if (species == SPECIES_UNOWN)
         {
             transform = &gBattleSpriteInfo[slot];
@@ -291,6 +293,7 @@ u8 sub_8077DD8(u8 slot, u16 species)
     {
         if (!IsContest())
         {
+            species = PORT_BATTLER_LOOK(slot, species);
             if (species == SPECIES_CASTFORM)
                 ret = gCastformElevations[gBattleMonForms[slot]];
             else if (species > NUM_SPECIES)

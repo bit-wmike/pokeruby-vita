@@ -18,6 +18,13 @@ code runs directly on the Vita.
   really there (port/port_view.c). Text boxes and menus stay in the
   middle; battles, menus and other scenes are the GBA screen at the same
   zoom. Switch in the START+SELECT menu ("Ansicht").
+- "Nur Hoenn" (menu, off by default): only third-generation Pokémon. Wild
+  encounters use own tables (tools/port/gen3_wild.py, list in
+  docs/nur_hoenn_wild.md); trainers, Team Aqua/Magma, static encounters
+  and in-game trades get real Hoenn Pokémon; gym leaders, Elite Four,
+  champion, Aqua/Magma leaders and Heiko keep their Pokémon (stats, moves,
+  level) but look like a Hoenn Pokémon of the same kind (port/port_hoenn.c).
+  Saves stay normal.
 - Next: battle/menu presentation, weather at the edges, quick-save,
   map overlay; Ruby.
 

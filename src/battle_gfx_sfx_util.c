@@ -1,4 +1,5 @@
 #include "global.h"
+#include "port_hoenn.h"
 #include "battle.h"
 #include "battle_anim.h"
 #include "battle_anim_special.h"
@@ -297,7 +298,7 @@ void BattleLoadOpponentMonSprite(struct Pokemon *pkmn, u8 b)
     personalityValue = GetMonData(pkmn, MON_DATA_PERSONALITY);
     if (gBattleSpriteInfo[b].transformSpecies == 0)
     {
-        species = GetMonData(pkmn, MON_DATA_SPECIES);
+        species = PORT_LOOK(pkmn, GetMonData(pkmn, MON_DATA_SPECIES));
         r7 = personalityValue;
     }
     else
@@ -349,7 +350,7 @@ void BattleLoadPlayerMonSpriteGfx(struct Pokemon *pkmn, u8 b)
     personalityValue = GetMonData(pkmn, MON_DATA_PERSONALITY);
     if (gBattleSpriteInfo[b].transformSpecies == 0)
     {
-        species = GetMonData(pkmn, MON_DATA_SPECIES);
+        species = PORT_LOOK(pkmn, GetMonData(pkmn, MON_DATA_SPECIES));
         r7 = personalityValue;
     }
     else
@@ -669,7 +670,7 @@ void sub_8031FC4(u8 a, u8 b, bool8 c)
         {
             r10 = GetBattlerPosition(a);
             if (GetBattlerSide(b) == 1)
-                species = GetMonData(&gEnemyParty[gBattlerPartyIndexes[b]], MON_DATA_SPECIES);
+                species = PORT_LOOK(&gEnemyParty[gBattlerPartyIndexes[b]], GetMonData(&gEnemyParty[gBattlerPartyIndexes[b]], MON_DATA_SPECIES));
             else
                 species = GetMonData(&gPlayerParty[gBattlerPartyIndexes[b]], MON_DATA_SPECIES);
             if (GetBattlerSide(a) == 0)
@@ -922,6 +923,8 @@ void sub_8032984(u8 a, u16 b)
     {
         if (gBattleSpriteInfo[a].transformSpecies != 0)
             b = gBattleSpriteInfo[a].transformSpecies;
+        else
+            b = PORT_BATTLER_LOOK(a, b);
         if (gEnemyMonElevation[b] != 0)
             gSprites[gBattleHealthBoxInfo[a].unk7].callback = sub_80328A4;
         else
