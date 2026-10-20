@@ -61,6 +61,7 @@ int virtuappu_mode1_line_dy;
 /* Pokémon port: backdrop drawn as this key colour (0 = off), so the port
  * can put its own picture behind the GBA layers. */
 uint32_t virtuappu_mode1_backdrop_key;
+int virtuappu_mode1_no_winopt; /* host benchmarks */
 static uint32_t mode1_backdrop_key_last;
 
 /* Window edges in GBA-screen coordinates -> wide frame coordinates. */
@@ -3129,7 +3130,16 @@ static bool mode1_render_native_compact_line(int line, uint16_t dispcnt, int fra
     c.win1_left = win1_left;
     c.win1_right = win1_right;
     uint32_t* const out_row = mode1_output_row(line);
-    if (any_window)
+    /* Pokemon port: windows that change nothing on this line (none active
+     * here, or every control 0x3F) take the fast unwindowed route. */
+    bool windowed = any_window;
+    if (windowed && !objwin_on && !virtuappu_mode1_no_winopt) {
+        const bool w0 = win0_on && win0_v_active && win0_ctrl != 0x3Fu;
+        const bool w1 = win1_on && win1_v_active && win1_ctrl != 0x3Fu;
+        if (outside_ctrl == 0x3Fu && !w0 && !w1)
+            windowed = false;
+    }
+    if (windowed)
         mode1_compact_composite(&c, frame_width, out_row, true);
     else
         mode1_compact_composite(&c, frame_width, out_row, false);

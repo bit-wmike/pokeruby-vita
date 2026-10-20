@@ -1955,7 +1955,13 @@ void MoveBattlerSpriteToBG(u8 bank, u8 toBG_2)
             r2 = 0;
         else
             r2 = GetBattlerPosition(bank);
+#ifdef PORT
+        // host / PS Vita port: the parameter is the offset into VRAM (on the
+        // GBA the low 16 bits of the address)
+        sub_80E4EF8(0, 0, r2, s.field_8, (u32)(s.field_0 - (u8 *)VRAM), (((s32)s.field_4 - VRAM) / 2048), REG_BG1CNT_BITFIELD.charBaseBlock);
+#else
         sub_80E4EF8(0, 0, r2, s.field_8, (u32)s.field_0, (((s32)s.field_4 - VRAM) / 2048), REG_BG1CNT_BITFIELD.charBaseBlock);
+#endif
         if (IsContest())
             sub_8076380();
     }

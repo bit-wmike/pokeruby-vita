@@ -256,6 +256,14 @@ int main(void)
         }
     }
     OpenWav();
+    {
+        extern int virtuappu_mode1_no_winopt;
+        virtuappu_mode1_no_winopt = getenv("PKR_NO_WINOPT") != NULL;
+    }
+    if (getenv("PKR_PROF")) {
+        extern unsigned Port_ProfileAverageUs(int);
+        (void)Port_ProfileAverageUs;
+    }
     if (getenv("PKR_HOENN_SELFTEST")) {
         void PortHoennSelfTest(void);
         PortHoennSelfTest();

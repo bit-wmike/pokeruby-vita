@@ -2,6 +2,8 @@
 #ifndef PORT_PORT_VIEW_H
 #define PORT_PORT_VIEW_H
 
+#include <stdint.h>
+
 #define PORT_WIDE_W 480
 #define PORT_WIDE_H 272
 /* where the GBA screen sits in the wide frame */
@@ -17,5 +19,12 @@ void PortView_VBlank(void);
 /* Before rendering: sets up the renderer; returns 1 for a wide frame
  * (480x272), 0 for a GBA frame (240x160). */
 int PortView_BeginFrame(void);
+/* BG0 text windows to the edges of the wide frame (also for the battle) */
+void PortView_PlaceWindows(void);
+int PortView_SpriteInWindow(int oamIndex);
+
+/* Battle stage (port/port_stage.c): 1 when this frame is a wide battle */
+int PortStage_BeginFrame(void);
+void PortStage_EndFrame(uint32_t *fb, int pitch);
 
 #endif

@@ -25,7 +25,7 @@ ifeq ($(TARGET),host)
 CC := gcc
 AS := as --32
 OBJCOPY := objcopy
-ARCHFLAGS := -m32 -fno-pie -no-pie
+ARCHFLAGS := -m32 -fno-pie -no-pie -msse2 -mfpmath=sse
 OPT ?= -O2 -g
 LDLIBS := -lm -pthread -rdynamic
 PLATFORM_SRC := $(wildcard platform/host/*.c)
@@ -70,12 +70,16 @@ ifneq ($(RENDER_WORKERS),0)
 WORKER_DEF := -DMODE1_PTHREAD_WORKERS=$(RENDER_WORKERS)
 endif
 PPU_DEFS := -DMODE1_GBA_WIDTH=480 -DMODE1_GBA_HEIGHT=272 -DMODE1_GBA_BG_CLIP_X=1024 $(WORKER_DEF)
+# ARM targets: the renderer's NEON paths (from the TMC port, gated by TMC_VITA)
+ifneq ($(TARGET),host)
+PPU_DEFS += -DTMC_VITA
+endif
 
 # The game is compiled as on the GBA: char is unsigned, overflow wraps,
 # no type-based alias analysis.
 GAME_CFLAGS := $(ARCHFLAGS) $(OPT) -std=gnu11 -funsigned-char -fwrapv -fno-strict-aliasing \
                -fno-delete-null-pointer-checks -fno-common -w
-PORT_CFLAGS := $(ARCHFLAGS) $(OPT) -std=gnu11 -funsigned-char -fwrapv -fno-strict-aliasing -Wall -Wno-unused-function
+PORT_CFLAGS := $(ARCHFLAGS) $(OPT) -ffp-contract=off -std=gnu11 -funsigned-char -fwrapv -fno-strict-aliasing -Wall -Wno-unused-function
 INCLUDES := -iquote include -I . -Iport/ppu/include
 
 GAME_SRC := $(filter-out src/libs/agb_flash%.c src/libs/siirtc.c,$(wildcard src/*.c src/*/*.c src/*/*/*.c))
@@ -147,7 +151,7 @@ $(BUILD)/port/%.o: port/%.c tools/port/naked2c.py
 	@$(PYTHON) tools/port/naked2c.py $(BUILD)/port/$*.i $(BUILD)/port/$*.pp.c
 	$(CC) $(PORT_CFLAGS) -c -x c $(BUILD)/port/$*.pp.c -o $@
 
-$(BUILD)/platform/%.o: platform/%.c tools/port/naked2c.py
+$(BUILD)/platform/%.o: platform/%.c tools/port/naked2c.py platform/vita/VERSION
 	@mkdir -p $(dir $@)
 	@$(CC) $(ARCHFLAGS) -std=gnu11 -E $(GAME_DEFS) $(PPU_DEFS) $(INCLUDES) $< -o $(BUILD)/platform/$*.i
 	@$(PYTHON) tools/port/naked2c.py $(BUILD)/platform/$*.i $(BUILD)/platform/$*.pp.c

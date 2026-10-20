@@ -854,14 +854,16 @@ void LoadMapTilesetPalettes(const struct MapLayout *mapLayout)
 // (x, y) also beyond the backup layout's margin of MAP_OFFSET metatiles,
 // looked up in the connected maps (the game itself only copies MAP_OFFSET
 // metatiles of them). Elsewhere it is the border, as in MapGridGetMetatileIdAt.
-u32 PortMapGetMetatileIdWide(int x, int y)
+// The whole block (metatile id, collision, elevation) at backup-layout
+// coordinates (x, y), also beyond the backup layout in the connected maps.
+u16 PortMapGetBlockWide(int x, int y)
 {
     const struct MapLayout *layout = gMapHeader.mapLayout;
     int mx = x - MAP_OFFSET, my = y - MAP_OFFSET;
     int i;
 
     if (AreCoordsWithinMapGridBounds(x, y) || gMapHeader.connections == NULL)
-        return MapGridGetMetatileIdAt(x, y);
+        return GetMapGridBlockAt(x, y);
     for (i = 0; i < gMapHeader.connections->count; i++)
     {
         const struct MapConnection *c = &gMapHeader.connections->connections[i];
@@ -880,9 +882,15 @@ u32 PortMapGetMetatileIdWide(int x, int y)
         default: continue;
         }
         if (nx >= 0 && nx < l->width && ny >= 0 && ny < l->height)
-            return l->map[nx + ny * l->width] & MAPGRID_METATILE_ID_MASK;
+            return l->map[nx + ny * l->width];
     }
-    return MapGridGetMetatileIdAt(x, y);
+    return GetMapGridBlockAt(x, y);
+}
+
+u32 PortMapGetMetatileIdWide(int x, int y)
+{
+    u16 b = PortMapGetBlockWide(x, y);
+    return b == MAPGRID_UNDEFINED ? (GetBorderBlockAt(x, y) & MAPGRID_METATILE_ID_MASK) : (b & MAPGRID_METATILE_ID_MASK);
 }
 // The tilemap entries of the metatile at (x, y) for BG1, BG2 and BG3, laid out
 // like DrawMetatile in field_camera.c does (top-left, top-right, bottom-left,

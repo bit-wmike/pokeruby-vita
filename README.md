@@ -5,7 +5,7 @@ from the [pret/pokeruby](https://github.com/pret/pokeruby) decompilation (its RE
 `README-decomp.md`, setup: `INSTALL.md`). No emulator: the game's C
 code runs directly on the Vita.
 
-## Status (0.2.0)
+## Status (0.2.6)
 
 - German Sapphire runs on the host test build from the intro to the
   overworld, with music and sound; x86 and ARM builds produce bit-identical
@@ -18,6 +18,12 @@ code runs directly on the Vita.
   really there (port/port_view.c). Text boxes and menus stay in the
   middle; battles, menus and other scenes are the GBA screen at the same
   zoom. Switch in the START+SELECT menu ("Ansicht").
+- Text windows (message box, menus, yes/no) sit at the edges of the Vita
+  screen; houses and centres stay fixed in the middle, caves are shown like
+  the open world; GBA-sized scenes (intro, menus) are zoomed to 3x.
+- Battle stage (wide view): the battle in front of the real place in
+  perspective (ground from the map, trees/rocks as upright cards, sky or
+  darkness), field weather animated in the background (port/port_stage.c).
 - "Nur Hoenn" (menu, off by default): only third-generation Pokémon. Wild
   encounters use own tables (tools/port/gen3_wild.py, list in
   docs/nur_hoenn_wild.md); trainers, Team Aqua/Magma, static encounters

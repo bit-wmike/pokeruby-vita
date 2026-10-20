@@ -114,9 +114,35 @@ static void RenderFrame(void)
     static int bound;
     PPUMemory ppu;
     u16 dispcnt = IO16(0x000);
-    int wide = PortView_BeginFrame();
-    int width = wide ? PORT_WIDE_W : PORT_GBA_W, height = wide ? PORT_WIDE_H : PORT_GBA_H;
-    int zoom = gPortConfig.viewMode == PORT_VIEW_FULL ? PORT_WIDE_H : PORT_GBA_H;
+    int wide;
+#ifndef __vita__
+    if (getenv("PKR_DUMP_OAM") && sFrameCounter == (uint32_t)atoi(getenv("PKR_DUMP_OAM"))) {
+        int k;
+        for (k = 0; k < 128; k++) {
+            u16 a0 = gHostOam[k * 8] | (gHostOam[k * 8 + 1] << 8), a1 = gHostOam[k * 8 + 2] | (gHostOam[k * 8 + 3] << 8);
+            u16 a2 = gHostOam[k * 8 + 4] | (gHostOam[k * 8 + 5] << 8);
+            if ((a0 & 0x300) == 0x200 || (a0 & 255) == 160) continue;
+            fprintf(stderr, "oam%3d a0=%04x a1=%04x a2=%04x y=%d x=%d tile=%d pal=%d\n", k, a0, a1, a2, a0 & 255, a1 & 511, a2 & 1023, a2 >> 12);
+        }
+    }
+#endif
+    wide = PortView_BeginFrame();
+#ifndef __vita__
+    {   /* host: PKR_HIDE=mask clears DISPCNT layer bits for the picture */
+        static int hide = -1;
+        if (hide < 0) hide = getenv("PKR_HIDE") ? (int)strtol(getenv("PKR_HIDE"), NULL, 16) : 0;
+        if (hide) { u16 d = IO16(0x000) & ~hide; IO16(0x000) = d; }
+    }
+#endif
+    int stage = wide ? 0 : PortStage_BeginFrame();
+    int width, height, zoom;
+    if (stage)
+        wide = 1;
+    width = wide ? PORT_WIDE_W : PORT_GBA_W;
+    height = wide ? PORT_WIDE_H : PORT_GBA_H;
+    /* full screen view: the wide scenes at 2x, the GBA-sized ones (intro,
+     * menus) zoomed to 3x */
+    zoom = gPortConfig.viewMode != PORT_VIEW_FULL ? PORT_GBA_H : wide ? PORT_WIDE_H : 181;
 
     if (!bound) {
         VirtuaPPUMode1GbaMemory mem = {
@@ -141,6 +167,8 @@ static void RenderFrame(void)
     Port_ProfileEnd(PORT_PROF_RENDER);
     sRendering = 0;
 
+    if (stage)
+        PortStage_EndFrame(sFrameBuffer, FRAME_MAX_W);
     Platform_Present(sFrameBuffer, width, height, FRAME_MAX_W, zoom);
 }
 
@@ -218,6 +246,10 @@ void Port_ProfileEnd(int what)
     sProfSum[what] += Platform_TimeUs() - sProfStart[what];
     if (++sProfCount[what] == 300) {
         sProfAvg[what] = sProfSum[what] / 300;
+#ifndef __vita__
+        if (getenv("PKR_PROF") && what == PORT_PROF_RENDER)
+            fprintf(stderr, "[prof] render avg %u us\n", (unsigned)sProfAvg[what]);
+#endif
         sProfSum[what] = 0;
         sProfCount[what] = 0;
     }
