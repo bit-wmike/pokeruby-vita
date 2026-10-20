@@ -44,6 +44,13 @@ extern int16_t virtuappu_mode1_obj_base_y[128];
 /* Source GBA scanline = output line - line_dy (wide view shifted down). */
 extern int virtuappu_mode1_line_dy;
 extern uint32_t virtuappu_mode1_backdrop_key;
+#define VIRTUAPPU_MODE1_MAX_REGIONS 48
+typedef struct virtuappu_mode1_region {
+    int x0, x1, y0, y1; /* destination rect in the frame */
+    int dx, dy;         /* the BG is sampled at (x - dx, y - dy) */
+} virtuappu_mode1_region;
+extern virtuappu_mode1_region virtuappu_mode1_bg_regions[4][VIRTUAPPU_MODE1_MAX_REGIONS];
+extern int virtuappu_mode1_bg_region_count[4];
 /* Pokémon port: per-BG screen map override (VRAM offset, 64x64 tiles) and
  * clip rectangles (pixels outside are transparent for that BG). */
 extern uint32_t virtuappu_mode1_bg_screen_override[4];

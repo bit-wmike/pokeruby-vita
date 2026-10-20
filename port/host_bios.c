@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "port/port.h"
+#include "port/asm_rt.h"
 #include "global.h"
 #include "gba/syscall.h"
 
@@ -49,9 +50,21 @@ void RegisterRamReset(u32 flags)
     }
 }
 
+/* GBA addresses that reach the BIOS calls straight from translated
+ * assembly (e.g. the summary screen's CpuSet to 0x06005B40) */
+static inline void *GbaPtr(const void *p)
+{
+    uintptr_t a = (uintptr_t)p;
+    if (a - 0x02000000u < 0x06000000u)
+        return AsmRt_Map((uint32_t)a);
+    return (void *)p;
+}
+
 /* SWI 0x0B */
 void CpuSet(const void *src, void *dest, u32 control)
 {
+    src = GbaPtr(src);
+    dest = GbaPtr(dest);
     u32 count = control & 0x1FFFFF;
     int fill = (control >> 24) & 1;
     if (control & (1 << 26)) {
@@ -72,6 +85,8 @@ void CpuSet(const void *src, void *dest, u32 control)
 /* SWI 0x0C: words in blocks of 8 */
 void CpuFastSet(const void *src, void *dest, u32 control)
 {
+    src = GbaPtr(src);
+    dest = GbaPtr(dest);
     u32 count = (control & 0x1FFFFF);
     u32 *d = (u32 *)dest;
     const u32 *s = (const u32 *)src;
@@ -112,8 +127,8 @@ static void Lz77(const void *src, void *dst)
     }
 }
 
-void LZ77UnCompWram(const void *src, void *dest) { Lz77(src, dest); }
-void LZ77UnCompVram(const void *src, void *dest) { Lz77(src, dest); }
+void LZ77UnCompWram(const void *src, void *dest) { Lz77(GbaPtr(src), GbaPtr(dest)); }
+void LZ77UnCompVram(const void *src, void *dest) { Lz77(GbaPtr(src), GbaPtr(dest)); }
 
 static void Rl(const void *src, void *dst)
 {
@@ -137,8 +152,8 @@ static void Rl(const void *src, void *dst)
     }
 }
 
-void RLUnCompWram(const void *src, void *dest) { Rl(src, dest); }
-void RLUnCompVram(const void *src, void *dest) { Rl(src, dest); }
+void RLUnCompWram(const void *src, void *dest) { Rl(GbaPtr(src), GbaPtr(dest)); }
+void RLUnCompVram(const void *src, void *dest) { Rl(GbaPtr(src), GbaPtr(dest)); }
 
 /* SWI 0x08 */
 u16 Sqrt(u32 number)

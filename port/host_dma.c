@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "port/port.h"
+#include "port/asm_rt.h"
 #include "global.h"
 
 struct HostHdma {
@@ -62,6 +63,11 @@ void HostDmaSet(int channel, const void *src, void *dst, unsigned int cnt)
 
     if (channel < 0 || channel > 3)
         return;
+    /* GBA addresses from assembly data / translated assembly */
+    if ((uintptr_t)src - 0x02000000u < 0x06000000u)
+        src = AsmRt_Map((uint32_t)(uintptr_t)src);
+    if ((uintptr_t)dst - 0x02000000u < 0x06000000u)
+        dst = AsmRt_Map((uint32_t)(uintptr_t)dst);
 
     if (!(control & DMA_ENABLE)) {
         sHdma[channel].active = 0;

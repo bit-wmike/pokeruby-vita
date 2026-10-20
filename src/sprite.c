@@ -357,6 +357,8 @@ void BuildOamBuffer(void)
 // committed when it is copied to OAM.
 s16 gPortOamStagedX[128], gPortOamStagedY[128];
 s16 gPortOamX[128], gPortOamY[128];
+// the sprite's tile tag per OAM entry (battle stage: finds the healthboxes)
+u16 gPortOamStagedTag[128], gPortOamTag[128];
 
 static s16 PortSpriteFullX(struct Sprite *sprite)
 {
@@ -530,6 +532,7 @@ static void AddSpritesToOamBuffer(void)
         // hidden on the GBA screen; keep it hidden in the wide view too
         gPortOamStagedX[oamIndex] = -2000;
         gPortOamStagedY[oamIndex] = -2000;
+        gPortOamStagedTag[oamIndex] = 0;
 #endif
         oamIndex++;
     }
@@ -685,6 +688,7 @@ void LoadOam(void)
 #ifdef PORT
         memcpy(gPortOamX, gPortOamStagedX, sizeof(gPortOamX));
         memcpy(gPortOamY, gPortOamStagedY, sizeof(gPortOamY));
+        memcpy(gPortOamTag, gPortOamStagedTag, sizeof(gPortOamTag));
 #endif
     }
 }
@@ -1748,6 +1752,7 @@ bool8 AddSpriteToOamBuffer(struct Sprite *sprite, u8 *oamIndex)
 #ifdef PORT
         gPortOamStagedX[*oamIndex] = PortSpriteFullX(sprite);
         gPortOamStagedY[*oamIndex] = PortSpriteFullY(sprite);
+        gPortOamStagedTag[*oamIndex] = sprite->template ? sprite->template->tileTag : 0;
 #endif
         (*oamIndex)++;
         return 0;
@@ -1775,6 +1780,7 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
 #ifdef PORT
         gPortOamStagedX[*oamIndex] = PortSpriteFullX(sprite);
         gPortOamStagedY[*oamIndex] = PortSpriteFullY(sprite);
+        gPortOamStagedTag[*oamIndex] = sprite->template ? sprite->template->tileTag : 0;
 #endif
         (*oamIndex)++;
         return 0;
@@ -1833,6 +1839,7 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
 #ifdef PORT
             gPortOamStagedX[*oamIndex] = PortSpriteFullX(sprite) - sprite->centerToCornerVecX + (s16)x;
             gPortOamStagedY[*oamIndex] = PortSpriteFullY(sprite) - sprite->centerToCornerVecY + (s16)y;
+            gPortOamStagedTag[*oamIndex] = sprite->template ? sprite->template->tileTag : 0;
 #endif
             destOam[i].tileNum = tileNum + subspriteTable->subsprites[i].tileOffset;
 

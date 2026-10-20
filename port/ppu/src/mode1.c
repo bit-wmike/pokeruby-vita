@@ -36,6 +36,12 @@ uint32_t virtuappu_mode1_bg_screen_override[4];
 int virtuappu_mode1_bg_clip_on[4];
 int virtuappu_mode1_bg_clip_x0[4], virtuappu_mode1_bg_clip_x1[4];
 int virtuappu_mode1_bg_clip_y0[4], virtuappu_mode1_bg_clip_y1[4];
+/* Pokémon port: BG regions. When a BG has regions, only they are drawn:
+ * destination rect [x0,x1)x[y0,y1) of the frame shows the BG as if the
+ * frame pixel were at (x - dx, y - dy) (used to move the text windows of
+ * the GBA screen to the edges of the wide frame, and to stretch them). */
+virtuappu_mode1_region virtuappu_mode1_bg_regions[4][VIRTUAPPU_MODE1_MAX_REGIONS];
+int virtuappu_mode1_bg_region_count[4];
 static inline uint32_t mode1_screen_base(int bg, uint16_t bgcnt) {
     return virtuappu_mode1_bg_screen_override[bg] ? virtuappu_mode1_bg_screen_override[bg]
                                                   : (uint32_t)((bgcnt >> 8u) & 0x1Fu) * 0x800u;
@@ -1188,6 +1194,16 @@ static void mode1_render_text_bg_native_tokens(int bg_index, int line, uint16_t 
 
 static void mode1_render_text_bg_compact_tokens(int bg_index, int line, uint16_t bgcnt, int frame_width,
                                                 uint16_t* tokens) {
+    if (virtuappu_mode1_bg_region_count[bg_index] > 0) {
+        for (int r = 0; r < virtuappu_mode1_bg_region_count[bg_index]; r++) {
+            const virtuappu_mode1_region* g = &virtuappu_mode1_bg_regions[bg_index][r];
+            int x0 = g->x0 < 0 ? 0 : g->x0, x1 = g->x1 > frame_width ? frame_width : g->x1;
+            if (line < g->y0 || line >= g->y1 || x0 >= x1)
+                continue;
+            mode1_render_text_bg_native_tokens_range(bg_index, line - g->dy, bgcnt, x0, x1, g->dx, tokens);
+        }
+        return;
+    }
     if (virtuappu_mode1_bg_clip_on[bg_index]) {
         int x0 = virtuappu_mode1_bg_clip_x0[bg_index], x1 = virtuappu_mode1_bg_clip_x1[bg_index];
         if (line < virtuappu_mode1_bg_clip_y0[bg_index] || line >= virtuappu_mode1_bg_clip_y1[bg_index])
@@ -1426,6 +1442,19 @@ void virtuappu_mode1_render_text_bg_line(int bg_index, int line, uint32_t* line_
         if (line < native_top || line >= native_bottom) return;
         render_min_x = native_left;
         render_max_x = native_right;
+    }
+    if (virtuappu_mode1_bg_region_count[bg_index] > 0 && !bpp8 && !mosaic_on) {
+        const int ymask = map_height_tiles * 8 - 1;
+        for (int r = 0; r < virtuappu_mode1_bg_region_count[bg_index]; r++) {
+            const virtuappu_mode1_region* g = &virtuappu_mode1_bg_regions[bg_index][r];
+            int x0 = g->x0 < 0 ? 0 : g->x0, x1 = g->x1 > frame_width ? frame_width : g->x1;
+            if (line < g->y0 || line >= g->y1 || x0 >= x1)
+                continue;
+            const int sy = (line - g->dy + scroll_y) & ymask;
+            mode1_render_text_bg_native_4bpp_range(bg_index, char_base, screen_base, map_width_tiles, sy >> 3, sy & 7,
+                                                   scroll_x, x0, x1, g->dx, priority, line_buffer, priority_buffer);
+        }
+        return;
     }
     if (virtuappu_mode1_bg_clip_on[bg_index]) {
         if (line < virtuappu_mode1_bg_clip_y0[bg_index] || line >= virtuappu_mode1_bg_clip_y1[bg_index])
