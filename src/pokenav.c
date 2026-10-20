@@ -1641,9 +1641,14 @@ void sub_80F1494(void)
 
         // FIXME!
         arr = ((u8*)&gSaveBlock1);
+#ifdef PORT
+        // the asm below adds gUnknown_020388B4 to arr
+        gUnknown_020388B4 = arr[gUnknown_020388B4 + 0x30F7];
+#else
         asm("ldrh r1, [r5]\n\
             add r0, r0, r1");
         gUnknown_020388B4 = arr[0x30F7];
+#endif
         // The bug fix for this code is the following:
         // gUnknown_020388B4 = gSaveBlock1.giftRibbons[gUnknown_020388B4];
         if (gUnknown_020388B4)

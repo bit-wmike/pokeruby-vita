@@ -49,7 +49,7 @@ u8 *de_sub_8041024(s32 arg0, u32 arg1)
     {
     case 0x400:
         nameIndex = GetSecretBaseTrainerNameIndex();
-        gender = eSecretBaseRecord.gender;
+        gender = eSecretBaseRecord->gender;
         if (nameIndex == TRAINER_CLASS_SCHOOL_KID)
             return de_sub_8040FE0(gender);
         return gTrainerClassNames[nameIndex];

@@ -1,0 +1,142 @@
+# Pokémon Ruby/Sapphire (German) - host / PS Vita port build.
+#
+#   make -f Makefile.port TARGET=host       32-bit Linux headless test build
+#   make -f Makefile.port TARGET=vita       PS Vita build (needs $VITASDK)
+#   GAME=sapphire (default) or GAME=ruby
+#
+# Before the first build, generate the game's assets with the decomp's own
+# build (German setup, see INSTALL.md):
+#   make clean && sh de_before.sh && make sapphire_de     (or ruby_de)
+# The port uses the generated graphics/sound files and the map file of that
+# build; it compiles the C code and the data assembly itself.
+
+TARGET ?= host
+GAME ?= sapphire
+GAME_UPPER := $(shell echo $(GAME) | tr a-z A-Z)
+BUILD := build/port-$(TARGET)-$(GAME)
+GEN := $(BUILD)/gen
+GBA_BUILD := build/$(GAME)_de
+GBA_MAP := poke$(GAME)_de.map
+
+PYTHON ?= python3
+PREPROC := tools/preproc/preproc
+
+ifeq ($(TARGET),host)
+CC := gcc
+AS := as --32
+OBJCOPY := objcopy
+ARCHFLAGS := -m32 -fno-pie -no-pie
+OPT ?= -O2 -g
+LDLIBS := -lm -pthread -rdynamic
+PLATFORM_SRC := $(wildcard platform/host/*.c)
+OUT := $(BUILD)/pokemon_host
+DATA_FILTER := $(PYTHON) tools/port/as_host.py
+else ifeq ($(TARGET),vita)
+VITASDK ?= /usr/local/vitasdk
+CC := $(VITASDK)/bin/arm-vita-eabi-gcc
+AS := $(VITASDK)/bin/arm-vita-eabi-as
+OBJCOPY := $(VITASDK)/bin/arm-vita-eabi-objcopy
+ARCHFLAGS := -march=armv7-a -mtune=cortex-a9 -mfpu=neon -mfloat-abi=hard -mthumb
+OPT ?= -O2 -g -ffunction-sections -fdata-sections
+LDLIBS := -Wl,-q -Wl,--gc-sections -lvita2d -lSceDisplay_stub -lSceCtrl_stub -lSceTouch_stub -lSceAudio_stub \
+          -lScePower_stub -lSceAppUtil_stub -lSceAppMgr_stub -lSceSysmodule_stub -lSceRtc_stub \
+          -lSceCommonDialog_stub -lSceGxm_stub -lScePgf_stub -lpthread -lm
+PLATFORM_SRC := $(wildcard platform/vita/source/*.c)
+OUT := $(BUILD)/pokemon_vita.elf
+# ARM: the data assembly needs no conversion
+DATA_FILTER := $(PYTHON) tools/port/as_host.py --arm
+endif
+
+GAME_DEFS := -D $(GAME_UPPER) -D REVISION=0 -D GERMAN -D DEBUG=0 -D MODERN=1 -D NONMATCHING -D PORT
+ASDEFS := --defsym $(GAME_UPPER)=1 --defsym REVISION=0 --defsym GERMAN=1 --defsym DEBUG=0 --defsym DEBUG_FIX=0 --defsym MODERN=1
+
+# Helper threads of the renderer (0 = render on the main thread only).
+RENDER_WORKERS ?= 2
+ifneq ($(RENDER_WORKERS),0)
+WORKER_DEF := -DMODE1_PTHREAD_WORKERS=$(RENDER_WORKERS)
+endif
+PPU_DEFS := -DMODE1_GBA_WIDTH=480 -DMODE1_GBA_HEIGHT=272 -DMODE1_GBA_BG_CLIP_X=1024 $(WORKER_DEF)
+
+# The game is compiled as on the GBA: char is unsigned, overflow wraps,
+# no type-based alias analysis.
+GAME_CFLAGS := $(ARCHFLAGS) $(OPT) -std=gnu11 -funsigned-char -fwrapv -fno-strict-aliasing \
+               -fno-delete-null-pointer-checks -fno-common -w
+PORT_CFLAGS := $(ARCHFLAGS) $(OPT) -std=gnu11 -funsigned-char -fwrapv -fno-strict-aliasing -Wall -Wno-unused-function
+INCLUDES := -iquote include -I . -Iport/ppu/include
+
+GAME_SRC := $(filter-out src/libs/agb_flash%.c src/libs/siirtc.c,$(wildcard src/*.c src/*/*.c src/*/*/*.c))
+DATA_SRC := $(wildcard data/*.s)
+SONG_SRC := $(wildcard sound/songs/midi/*.s)
+PORT_SRC := $(wildcard port/*.c) port/ppu/src/mode1.c port/ppu/src/virtuappu.c $(PLATFORM_SRC)
+
+GAME_OBJ := $(patsubst %.c,$(BUILD)/%.o,$(GAME_SRC))
+DATA_OBJ := $(patsubst %.s,$(BUILD)/%.o,$(DATA_SRC) $(SONG_SRC))
+PORT_OBJ := $(patsubst %.c,$(BUILD)/%.o,$(PORT_SRC))
+GEN_OBJ := $(GEN)/mem.o $(GEN)/m4a_gen.o
+
+all: $(OUT)
+
+$(OUT): $(GAME_OBJ) $(DATA_OBJ) $(PORT_OBJ) $(GEN_OBJ)
+	$(CC) $(ARCHFLAGS) -o $@ $^ $(LDLIBS)
+
+# Game C: preprocessor -> charmap strings -> ARM-only bits removed and
+# assembly-only functions translated (from the GBA build's object) -> compiler.
+# The game's .bss becomes game_bss so RegisterRamReset can clear exactly the
+# game's variables.
+$(BUILD)/src/%.o: src/%.c tools/port/naked2c.py tools/port/asm2c.py port/asm_rt.h
+	@mkdir -p $(dir $@)
+	@$(CC) $(ARCHFLAGS) -E $(GAME_DEFS) $(INCLUDES) -iquote $(dir $<) $< -o $(BUILD)/src/$*.i
+	@$(PREPROC) $(BUILD)/src/$*.i charmap.txt > $(BUILD)/src/$*.pp0.c
+	@$(PYTHON) tools/port/naked2c.py $(BUILD)/src/$*.pp0.c $(BUILD)/src/$*.pp.c --obj $(GBA_BUILD)/src/$*.o
+	$(CC) $(GAME_CFLAGS) -c -x c $(BUILD)/src/$*.pp.c -o $@
+	@$(OBJCOPY) --rename-section .bss=game_bss $@
+
+# Data assembly (scripts, maps, tables) and songs.
+$(BUILD)/data/%.o: data/%.s tools/port/as_host.py
+	@mkdir -p $(dir $@)
+	@$(PREPROC) $< charmap.txt | cpp -I include | $(PREPROC) -ie $< charmap.txt > $(BUILD)/data/$*.pp.s
+	@$(DATA_FILTER) $(BUILD)/data/$*.pp.s $(BUILD)/data/$*.host.s -I include -I sound
+	$(AS) $(ASDEFS) -I include -I sound -o $@ $(BUILD)/data/$*.host.s
+
+$(BUILD)/sound/%.o: sound/%.s tools/port/as_host.py
+	@mkdir -p $(dir $@)
+	@$(DATA_FILTER) $< $(BUILD)/sound/$*.host.s -I sound -I include
+	$(AS) $(ASDEFS) -I sound -I include -o $@ $(BUILD)/sound/$*.host.s
+
+# RAM symbols placed by the GBA linker scripts.
+$(GEN)/mem.s: tools/port/gen_mem.py $(GBA_MAP)
+	@mkdir -p $(GEN)
+	$(PYTHON) tools/port/gen_mem.py $(GBA_BUILD)/sym_ewram.ld $(GBA_BUILD)/sym_bss.ld $(GBA_MAP) $@
+$(GEN)/mem.o: $(GEN)/mem.s
+	$(AS) -o $@ $<
+
+# The assembly part of the m4a sound engine, translated to C.
+$(GEN)/m4a_gen.c: tools/port/asm2c_flat.py tools/port/asm2c.py tools/port/naked2c.py $(GBA_BUILD)/src/libs/m4a_1.o
+	@mkdir -p $(GEN)
+	$(PYTHON) tools/port/asm2c_flat.py --obj $(GBA_BUILD)/src/libs/m4a_1.o --out $@ --map SoundMainRAM_Buffer=SoundMainRAM
+$(GEN)/m4a_gen.o: $(GEN)/m4a_gen.c port/asm_rt.h
+	$(CC) $(PORT_CFLAGS) -Wno-unused-label -Wno-unused-but-set-variable -O2 $(INCLUDES) -c $< -o $@
+
+# Port layer and renderer.
+$(BUILD)/port/ppu/%.o: port/ppu/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(PORT_CFLAGS) $(PPU_DEFS) -O3 $(INCLUDES) -c $< -o $@
+
+# Port files that use the game's structs get the same APCS struct layout
+# (tools/port/naked2c.py) as the game code.
+$(BUILD)/port/%.o: port/%.c tools/port/naked2c.py
+	@mkdir -p $(dir $@)
+	@$(CC) $(ARCHFLAGS) -E $(GAME_DEFS) $(PPU_DEFS) $(INCLUDES) $< -o $(BUILD)/port/$*.i
+	@$(PYTHON) tools/port/naked2c.py $(BUILD)/port/$*.i $(BUILD)/port/$*.pp.c
+	$(CC) $(PORT_CFLAGS) -c -x c $(BUILD)/port/$*.pp.c -o $@
+
+$(BUILD)/platform/%.o: platform/%.c tools/port/naked2c.py
+	@mkdir -p $(dir $@)
+	@$(CC) $(ARCHFLAGS) -E $(GAME_DEFS) $(PPU_DEFS) $(INCLUDES) $< -o $(BUILD)/platform/$*.i
+	@$(PYTHON) tools/port/naked2c.py $(BUILD)/platform/$*.i $(BUILD)/platform/$*.pp.c
+	$(CC) $(PORT_CFLAGS) -c -x c $(BUILD)/platform/$*.pp.c -o $@
+
+clean:
+	rm -rf $(BUILD)
+
+.PHONY: all clean

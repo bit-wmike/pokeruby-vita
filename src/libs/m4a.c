@@ -313,10 +313,14 @@ void MPlayExtender(struct CgbChannel *cgbChans)
     soundInfo->ident = ident;
 }
 
+#ifdef PORT
+void MusicPlayerJumpTableCopy(void); // port/host_m4a.c
+#else
 void MusicPlayerJumpTableCopy(void)
 {
     asm("swi 0x2A");
 }
+#endif
 
 void ClearChain(void *x)
 {
@@ -400,10 +404,10 @@ void SampleFreqSet(u32 freq)
 
     m4aSoundVSyncOn();
 
-    while (*(vu8 *)REG_ADDR_VCOUNT == 159)
+    while ((u8)REG_VCOUNT == 159)
         ;
 
-    while (*(vu8 *)REG_ADDR_VCOUNT != 159)
+    while ((u8)REG_VCOUNT != 159)
         ;
 
     REG_TM0CNT_H = TIMER_ENABLE | TIMER_1CLK;

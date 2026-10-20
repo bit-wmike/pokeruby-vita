@@ -1,7 +1,12 @@
 #ifndef GUARD_GBA_IO_REG_H
 #define GUARD_GBA_IO_REG_H
 
+#ifdef PORT
+extern unsigned char gHostIo[];
+#define REG_BASE ((u32)gHostIo) // host / PS Vita port: registers are an array
+#else
 #define REG_BASE 0x4000000 // I/O register base address
+#endif
 
 // I/O register offsets
 
@@ -345,7 +350,14 @@
 
 #define REG_DISPCNT     (*(vu16 *)REG_ADDR_DISPCNT)
 #define REG_DISPSTAT    (*(vu16 *)REG_ADDR_DISPSTAT)
+#ifdef PORT
+// Reading VCOUNT outside of rendering moves the emulated beam on, so the
+// game's busy-wait loops on it end.
+void *HostVcountPtr(void);
+#define REG_VCOUNT      (*(vu16 *)HostVcountPtr())
+#else
 #define REG_VCOUNT      (*(vu16 *)REG_ADDR_VCOUNT)
+#endif
 #define REG_BG0CNT      (*(vu16 *)REG_ADDR_BG0CNT)
 #define REG_BG1CNT      (*(vu16 *)REG_ADDR_BG1CNT)
 #define REG_BG2CNT      (*(vu16 *)REG_ADDR_BG2CNT)

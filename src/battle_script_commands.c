@@ -6922,11 +6922,19 @@ static void atk92_setlightscreen(void)
     gBattlescriptCurrInstr++;
 }
 
-#ifdef NOTMATCHING
+#ifdef PORT
+// C version of the assembly below (host / PS Vita port).
+extern const u8 BattleScript_SturdyPreventsOHKO[];
 static void atk93_tryKO(void)
 {
-   if (gBattleMons[gBattlerTarget].item == ITEM_ENIGMA_BERRY)
-        holdEffect = gEnigmaBerries[gBattlerTarget].holdEffect, param = gEnigmaBerries[gBattlerTarget].holdEffectParam;
+    u8 holdEffect, param;
+    bool8 hit;
+
+    if (gBattleMons[gBattlerTarget].item == ITEM_ENIGMA_BERRY)
+    {
+        holdEffect = gEnigmaBerries[gBattlerTarget].holdEffect;
+        param = gEnigmaBerries[gBattlerTarget].holdEffectParam;
+    }
     else
     {
         holdEffect = ItemId_GetHoldEffect(gBattleMons[gBattlerTarget].item);
@@ -6935,9 +6943,9 @@ static void atk93_tryKO(void)
 
     gPotentialItemEffectBattler = gBattlerTarget;
 
-    if (holdEffect == HOLD_EFFECT_FOCUS_BAND && (Random() % 100) < param)
+    if (holdEffect == HOLD_EFFECT_FOCUS_BAND && (u16)(Random() % 100) < param)
     {
-        RecordItemEffectBattle(gBattlerTarget, holdEffect);
+        RecordItemEffectBattle(gBattlerTarget, HOLD_EFFECT_FOCUS_BAND);
         gSpecialStatuses[gBattlerTarget].focusBanded = 1;
     }
 
@@ -6945,34 +6953,55 @@ static void atk93_tryKO(void)
     {
         gMoveResultFlags |= MOVE_RESULT_MISSED;
         gLastUsedAbility = ABILITY_STURDY;
-        gBattlescriptCurrInstr = x;
+        gBattlescriptCurrInstr = BattleScript_SturdyPreventsOHKO;
         RecordAbilityBattle(gBattlerTarget, ABILITY_STURDY);
         return;
     }
 
+    hit = FALSE;
     if (!(gStatuses3[gBattlerTarget] & STATUS3_ALWAYS_HITS))
     {
-        u16 to_cmp = gBattleMons[gBattlerAttacker].level - gBattleMons[gBattlerTarget].level + gBattleMoves[gCurrentMove].accuracy;
-        if (Random() % 0x64 + 1 < to_cmp || gBattleMons[gBattlerAttacker].level < gBattleMons[gBattlerTarget].level)
+        u16 chance = gBattleMoves[gCurrentMove].accuracy
+                   + (gBattleMons[gBattlerAttacker].level - gBattleMons[gBattlerTarget].level);
+        if ((s32)((u16)(Random() % 100) + 1) < (s32)chance
+         && gBattleMons[gBattlerAttacker].level >= gBattleMons[gBattlerTarget].level)
+            hit = TRUE;
+    }
+    else if (gDisableStructs[gBattlerTarget].battlerWithSureHit == gBattlerAttacker
+          && gBattleMons[gBattlerAttacker].level >= gBattleMons[gBattlerTarget].level)
+    {
+        hit = TRUE;
+    }
+
+    if (hit)
+    {
+        if (gProtectStructs[gBattlerTarget].endured)
         {
-            goto MOVE_RESULT_MISSED_LABEL;
+            gBattleMoveDamage = gBattleMons[gBattlerTarget].hp - 1;
+            gMoveResultFlags |= MOVE_RESULT_FOE_ENDURED;
         }
+        else if (gSpecialStatuses[gBattlerTarget].focusBanded)
+        {
+            gBattleMoveDamage = gBattleMons[gBattlerTarget].hp - 1;
+            gMoveResultFlags |= MOVE_RESULT_FOE_HUNG_ON;
+            gLastUsedItem = gBattleMons[gBattlerTarget].item;
+        }
+        else
+        {
+            gBattleMoveDamage = gBattleMons[gBattlerTarget].hp;
+            gMoveResultFlags |= MOVE_RESULT_ONE_HIT_KO;
+        }
+        gBattlescriptCurrInstr += 5;
     }
     else
     {
-        if (gDisableStructs[gBattlerTarget].battlerWithSureHit != gBattlerAttacker || gBattleMons[gBattlerAttacker].level < gBattleMons[gBattlerTarget].level)
-        {
-
-        }
+        gMoveResultFlags |= MOVE_RESULT_MISSED;
+        if (gBattleMons[gBattlerAttacker].level >= gBattleMons[gBattlerTarget].level)
+            gBattleCommunication[MULTISTRING_CHOOSER] = 0;
+        else
+            gBattleCommunication[MULTISTRING_CHOOSER] = 1;
+        gBattlescriptCurrInstr = T1_READ_PTR(gBattlescriptCurrInstr + 1);
     }
-
-MOVE_RESULT_MISSED_LABEL:
-    gBattleTypeFlags |= MOVE_RESULT_MISSED;
-    if (gBattleMons[gBattlerAttacker].level < gBattleMons[gBattlerTarget].level)
-        gBattleCommunication[MULTISTRING_CHOOSER] = 1;
-    else
-        gBattleCommunication[MULTISTRING_CHOOSER] = 0;
-    gBattlescriptCurrInstr = T1_READ_PTR(gBattlescriptCurrInstr + 1);
 }
 
 #else

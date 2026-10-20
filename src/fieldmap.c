@@ -118,8 +118,14 @@ static void InitBackupMapLayoutConnections(struct MapHeader *mapHeader)
     // is NULL, causing count to be assigned a garbage value. This garbage value
     // just so happens to have the most significant bit set, so it is treated as
     // negative and the loop below thankfully never executes in this scenario.
+#ifdef PORT
+    // the GBA reads garbage from address 0 here; the port has no BIOS there
+    int count = mapHeader->connections ? mapHeader->connections->count : 0;
+    const struct MapConnection *connection = mapHeader->connections ? mapHeader->connections->connections : NULL;
+#else
     int count = mapHeader->connections->count;
     const struct MapConnection *connection = mapHeader->connections->connections;
+#endif
     int i;
 
     gMapConnectionFlags = sDummyConnectionFlags;

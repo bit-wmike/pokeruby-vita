@@ -559,8 +559,18 @@ void gpu_sync_bg_hide()
 const struct MapConnection *GetMapConnection(u8 dir)
 {
     s32 i;
+#ifdef PORT
+    s32 count;
+    const struct MapConnection *connection;
+
+    if (gMapHeader.connections == NULL)
+        return NULL;
+    count = gMapHeader.connections->count;
+    connection = gMapHeader.connections->connections;
+#else
     s32 count = gMapHeader.connections->count;
     const struct MapConnection *connection = gMapHeader.connections->connections;
+#endif
 
     if (connection == NULL)
         return NULL;

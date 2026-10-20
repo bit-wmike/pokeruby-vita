@@ -1,4 +1,7 @@
 #include "global.h"
+#ifdef PORT
+void PortFatalHalt(const char *why);
+#endif
 #include "script.h"
 #include "event_data.h"
 #include "constants/map_scripts.h"
@@ -100,7 +103,11 @@ bool8 RunScriptCommand(struct ScriptContext *ctx)
             if (ctx->scriptPtr == gNullScriptPtr)
             {
                 while (1)
+#ifdef PORT
+                    PortFatalHalt("script reached gNullScriptPtr");
+#else
                     asm("svc 2"); // HALT
+#endif
             }
 
             cmdCode = *(ctx->scriptPtr);

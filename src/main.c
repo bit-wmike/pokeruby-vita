@@ -64,7 +64,9 @@ bool8 gLinkVSyncDisabled;
 u32 IntrMain_Buffer[0x200];
 s8 gPcmDmaCounter;
 
+#ifndef PORT
 EWRAM_DATA u8 gSharedMem[0x20000] = {0};
+#endif // PORT: gSharedMem is the start of gHostEwram (port/host_mem.c)
 EWRAM_DATA void (**gFlashTimerIntrFunc)(void) = NULL;
 
 static void UpdateLinkAndCallCallbacks(void);
@@ -83,7 +85,7 @@ static void WaitForVBlank(void);
 
 void AgbMain()
 {
-#if MODERN
+#if MODERN && !defined(PORT)
     // Modern compilers are liberal with the stack on entry to this function,
     // so RegisterRamReset may crash if it resets IWRAM.
     RegisterRamReset(RESET_ALL & ~RESET_IWRAM);
