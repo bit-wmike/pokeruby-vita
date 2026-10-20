@@ -17,6 +17,10 @@
 #include "tv.h"
 
 #include "data/wild_encounters.h"
+#ifdef PORT
+#include "data/port_gen3_wild.h"
+#define gWildMonHeaders PORT_WILD_MON_HEADERS
+#endif
 
 #define MAX_ENCOUNTER_RATE 2880
 

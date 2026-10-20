@@ -294,7 +294,7 @@ static void AudioInit(void)
 
 /* ---------------------------------------------------- menu (START+SELECT) */
 
-enum { MI_VIEW, MI_STYLE, MI_FPS, MI_BACK, MI_COUNT };
+enum { MI_VIEW, MI_STYLE, MI_FPS, MI_HOENN, MI_BACK, MI_COUNT };
 
 static void MenuLine(int item, char *buf, size_t size)
 {
@@ -304,6 +304,7 @@ static void MenuLine(int item, char *buf, size_t size)
         case MI_VIEW: snprintf(buf, size, "Ansicht: %s", views[gPortConfig.viewMode]); break;
         case MI_STYLE: snprintf(buf, size, "Bilddarstellung: %s", styles[gPortConfig.displayStyle]); break;
         case MI_FPS: snprintf(buf, size, "Bildrate: %s", gPortConfig.frameRate30 ? "30 (Spieltempo bleibt)" : "60"); break;
+        case MI_HOENN: snprintf(buf, size, "Wilde Pokemon: %s", gPortConfig.gen3Wild ? "Nur Hoenn (3. Gen.)" : "Original"); break;
         default: snprintf(buf, size, "Zurueck zum Spiel"); break;
     }
 }
@@ -320,6 +321,7 @@ static int MenuChange(int item, int d)
         case MI_VIEW: gPortConfig.viewMode = Wrap(gPortConfig.viewMode, d ? d : 1, 2); break;
         case MI_STYLE: gPortConfig.displayStyle = Wrap(gPortConfig.displayStyle, d ? d : 1, 3); break;
         case MI_FPS: gPortConfig.frameRate30 ^= 1; break;
+        case MI_HOENN: gPortConfig.gen3Wild ^= 1; break;
         case MI_BACK:
             if (d == 0)
                 return 1;
@@ -371,7 +373,7 @@ static void RunMenu(void)
             break;
     }
     Port_ConfigSave();
-    Platform_Log("[ui] menu closed: view=%d style=%d fps30=%d\n", gPortConfig.viewMode, gPortConfig.displayStyle,
+    Platform_Log("[ui] menu closed: hoenn=%d view=%d style=%d fps30=%d\n", gPortConfig.gen3Wild, gPortConfig.viewMode, gPortConfig.displayStyle,
                  gPortConfig.frameRate30);
     sAnchored = 0; /* the menu stalled the game: re-anchor the pacing */
 }

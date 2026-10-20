@@ -9,6 +9,7 @@ struct PortConfig {
     int viewMode;     /* PORT_VIEW_* */
     int displayStyle; /* PORT_STYLE_* */
     int frameRate30;  /* render every 2nd frame, game speed unchanged */
+    int gen3Wild;     /* "Nur Hoenn": only gen-3 wild Pokémon */
 };
 
 extern struct PortConfig gPortConfig;

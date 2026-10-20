@@ -19,6 +19,9 @@
 #include "event_data.h"
 #include "trig.h"
 #include "graphics.h"
+#ifdef PORT
+#define gWildMonHeaders PORT_WILD_MON_HEADERS
+#endif
 
 // Static type declarations
 

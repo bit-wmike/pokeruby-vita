@@ -5,7 +5,7 @@
 
 #include "port/port_config.h"
 
-struct PortConfig gPortConfig = {PORT_VIEW_FULL, PORT_STYLE_PIXEL, 0};
+struct PortConfig gPortConfig = {PORT_VIEW_FULL, PORT_STYLE_PIXEL, 0, 0};
 
 static void Set(const char *key, int v)
 {
@@ -15,6 +15,8 @@ static void Set(const char *key, int v)
         gPortConfig.displayStyle = v;
     else if (!strcmp(key, "frame_rate_30"))
         gPortConfig.frameRate30 = v != 0;
+    else if (!strcmp(key, "only_hoenn"))
+        gPortConfig.gen3Wild = v != 0;
 }
 
 void Port_ConfigLoad(void)
@@ -32,6 +34,8 @@ void Port_ConfigLoad(void)
             Set(key, v);
     }
     }
+    if (getenv("PKR_HOENN")) /* host build */
+        gPortConfig.gen3Wild = atoi(getenv("PKR_HOENN")) != 0;
     if (env) /* host build: PKR_VIEW=0/1 */
         gPortConfig.viewMode = atoi(env) ? PORT_VIEW_FULL : PORT_VIEW_GBA;
 }
@@ -43,7 +47,13 @@ void Port_ConfigSave(void)
                      "# Pokemon Vita port settings\n"
                      "wide_view = %d\n"
                      "display_style = %d\n"
-                     "frame_rate_30 = %d\n",
-                     gPortConfig.viewMode, gPortConfig.displayStyle, gPortConfig.frameRate30);
+                     "frame_rate_30 = %d\n"
+                     "only_hoenn = %d\n",
+                     gPortConfig.viewMode, gPortConfig.displayStyle, gPortConfig.frameRate30, gPortConfig.gen3Wild);
     Platform_WriteFile("settings.ini", buf, (unsigned long)n);
+}
+
+int PortGen3Wild(void)
+{
+    return gPortConfig.gen3Wild;
 }
