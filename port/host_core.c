@@ -18,6 +18,8 @@
 #include "port/ppu/include/virtuappu.h"
 #include "port/ppu/include/cpu/mode1.h"
 
+#include "port/port_config.h"
+
 #include "global.h"
 #include "main.h"
 
@@ -139,6 +141,17 @@ static void RenderFrame(void)
     Platform_Present(sFrameBuffer, width, height, FRAME_MAX_W, height);
 }
 
+/* A frame that is not shown: the scanline timing (HBlank DMA and
+ * interrupts) still happens, as the game depends on it. */
+static void SkipFrame(void)
+{
+    int line;
+    sRendering = 1;
+    for (line = 0; line < 160; line++)
+        PreLine(line);
+    sRendering = 0;
+}
+
 static void CheckFlash(void)
 {
     if (sFlashDirty && ++sFlashTimer >= 30) {
@@ -151,7 +164,10 @@ static void HostRunFrame(void)
 {
     u16 keys;
 
-    RenderFrame();
+    if ((gPortConfig.frameRate30 && (sFrameCounter & 1)) || !Platform_PaceAllowsRender())
+        SkipFrame();
+    else
+        RenderFrame();
 
     /* VBlank */
     IO16(0x006) = 160;
@@ -208,6 +224,7 @@ unsigned Port_ProfileAverageUs(int what)
 
 void Port_RunGame(void)
 {
+    Port_ConfigLoad();
     if (!Platform_LoadSave(gHostFlash, sizeof(gHostFlash)))
         memset(gHostFlash, 0xFF, sizeof(gHostFlash));
     setjmp(sResetJump);

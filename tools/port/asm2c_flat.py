@@ -28,6 +28,15 @@ TOKEN_BASE = 0xF0000000
 TOKEN_EXIT = TOKEN_BASE
 
 
+# The PCM mixer keeps a loop counter in the top two bits of its buffer
+# pointer (GBA RAM addresses have 00 there and the bus ignores those bits):
+# "adds r5, r5, #0x40000000 ... bcc" and "bic r5, r5, #0xc0000000". Host
+# addresses can have other top bits, so these instructions work on the
+# pointer with the host's top bits of the sound buffer (SOUND_INFO_PTR)
+# exchanged for 00, i.e. on the value the GBA would see.
+TOPBITS = "(LD32(0x03007ff0u) & 0xC0000000u)"
+
+
 class FlatGen(A.FuncGen):
     def __init__(self, tr, insns, labels, entries, symmap):
         super().__init__(tr, "flat", insns, set())
@@ -50,6 +59,20 @@ class FlatGen(A.FuncGen):
 
     def do(self, ins, base, ops, cond):
         e = self.emit
+        if base in ("adds", "bic") and len(ops) == 3 and ops[0] == ops[1] and \
+                ops[2] in ("#1073741824", "#-1073741824", "#3221225472"):
+            r = A.reg(ops[0])
+            if base == "adds" and ops[2] == "#1073741824":
+                e("{ u32 a_ = %s ^ %s, r_ = a_ + 0x40000000u; c = (r_ < a_); v = ((a_ ^ r_) & (0x40000000u ^ r_)) >> 31;"
+                  " n = r_ >> 31; z = (r_ == 0); %s = r_ ^ %s; } /* GBA view of the pointer */" % (r, TOPBITS, r, TOPBITS))
+                return
+            if base == "bic":
+                e("%s = (%s & ~0xC0000000u) | %s; /* GBA view of the pointer */" % (r, r, TOPBITS))
+                return
+        if base == "lsr" and not ins.thumb and len(ops) == 3 and ops[1] == "r5" and ops[2] == "#30":
+            # the mixer reads its loop counter back from the pointer
+            e("%s = (r5 ^ %s) >> 30; /* GBA view of the pointer */" % (A.reg(ops[0]), TOPBITS))
+            return
         if base == "bl":
             addr, ext = self.target_of_bl(ins, ops)
             if ext is not None:
@@ -129,6 +152,10 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--objdump", default="arm-none-eabi-objdump")
     ap.add_argument("--map", action="append", default=[])
+    ap.add_argument("--trace", action="store_true", help="debug: print every label reached")
+    ap.add_argument("--gba-address-flags", action="append", default=[], metavar="ADDR",
+                    help="instruction at ADDR computes flags from a RAM address: set them as on the GBA "
+                         "(addresses are positive there: N=0, V=0, Z=0)")
     args = ap.parse_args()
     symmap = dict(m.split("=") for m in args.map)
 
@@ -140,6 +167,7 @@ def main():
     for name, a in entries.items():
         g.targets.add(a)
 
+    gba_flags = {int(a, 0) for a in args.gba_address_flags}
     body = []
     prev_adr = False
     for ins in tr.insns:
@@ -148,6 +176,8 @@ def main():
             g.adr_const = {}
         g.lines = []
         g.translate(ins)
+        if ins.addr in gba_flags:
+            g.lines.append("    n = 0; v = 0; z = 0; /* flags of a GBA RAM address (port) */")
         prev_adr = any("/* adr " in l for l in g.lines)
         body.append((ins.addr, ins, g.lines))
     addrs = {a for a, _, _ in body}
@@ -160,6 +190,8 @@ def main():
            "typedef uint8_t u8; typedef uint16_t u16; typedef uint32_t u32; typedef uint64_t u64;",
            "typedef int8_t s8; typedef int16_t s16; typedef int32_t s32;",
            '#include "port/asm_rt.h"', ""]
+    if args.trace:
+        out += ["#include <stdio.h>", "int gFlatTrace;", ""]
     text = tr.text
     out.append("static const unsigned char gFlatText[%d] __attribute__((aligned(4))) = {" % len(text))
     for i in range(0, len(text), 16):
@@ -184,10 +216,14 @@ def main():
     out.append("dispatch:")
     out.append("    /* jumps to this object's own functions keep the register state */")
     for name in sorted(set(entries) | tr.ptr_entries):
-        out.append("    if ((t_ & ~1u) == (u32)(uintptr_t)&%s) goto L_%x;" % (name, entries[name]))
+        out.append("    if ((t_ | 1u) == ((u32)(uintptr_t)&%s | 1u)) goto L_%x;" % (name, entries[name]))
     out.append("    if ((t_ & 0xF0000000u) != 0x%08xu) {" % TOKEN_BASE)
     out.append("        /* a C function pointer: call it, then return to lr */")
+    out.append("#ifdef __arm__")
+    out.append("        r0 = ASMRT_CALL(t_, r0, r1, r2, r3); /* Thumb bit is part of the pointer */")
+    out.append("#else")
     out.append("        r0 = ASMRT_CALL(t_ & ~1u, r0, r1, r2, r3);")
+    out.append("#endif")
     out.append("        t_ = lr;")
     out.append("        if ((t_ & 0xF0000000u) != 0x%08xu)" % TOKEN_BASE)
     out.append("            return r0; /* never happens: lr always holds a token here */")
@@ -208,6 +244,8 @@ def main():
     for addr, ins, lines in body:
         if addr in targets:
             out.append("L_%x:" % addr)
+            if args.trace:
+                out.append('    if (gFlatTrace) fprintf(stderr, "L %x %%x %%x %%x %%x %%x %%x %%x %%x %%x %%x %%x %%x %%x n%%d z%%d c%%d v%%d\\n", r0, r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, (int)n, (int)z, (int)c, (int)v);' % addr)
         out.append("    /* %04x %s %s */" % (addr, ins.mnem, ", ".join(ins.ops)))
         out += lines
     out.append("    return r0;")

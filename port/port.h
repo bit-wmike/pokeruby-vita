@@ -60,6 +60,8 @@ void Platform_SubmitAudio(const int16_t *samples, int frames);
 int Platform_LoadSave(void *data, size_t size);
 void Platform_WriteSave(const void *data, size_t size);
 void Platform_Log(const char *fmt, ...);
+/* Frame pacing: 0 = skip drawing this frame (the game is running late). */
+int Platform_PaceAllowsRender(void);
 
 #ifdef __cplusplus
 }

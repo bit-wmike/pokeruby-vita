@@ -85,6 +85,8 @@ static void FinishWav(void)
     }
 }
 
+extern int gFlatTrace __attribute__((weak)); /* debug build of m4a_gen.c */
+
 uint16_t Platform_PollKeys(void)
 {
     int frame = (int)Port_FrameCounter() + 1;
@@ -96,6 +98,8 @@ uint16_t Platform_PollKeys(void)
         printf("host: done after %d frames\n", frame);
         exit(0);
     }
+    if (&gFlatTrace && getenv("PKR_FLAT_TRACE_AT"))
+        gFlatTrace = frame == atoi(getenv("PKR_FLAT_TRACE_AT"));
     for (i = 0; i < sInputCount; i++)
         if (frame >= sInput[i].frame && frame < sInput[i].frame + sInput[i].len)
             keys |= (uint16_t)sInput[i].keys;
@@ -157,6 +161,7 @@ static void OnCrash(int sig)
 /* Integer division by zero: x86 traps, the ARM targets (GBA BIOS/libgcc,
  * Vita libgcc) return 0. Emulate that for the test build: skip the div/idiv
  * instruction with quotient 0 and remainder = dividend. */
+#ifdef __i386__
 static int InsnLength(const unsigned char *p)
 {
     int len = 0, mod, rm;
@@ -195,6 +200,7 @@ static void OnDivZero(int sig, siginfo_t *info, void *ctx)
     uc->uc_mcontext.gregs[REG_EAX] = 0;
     uc->uc_mcontext.gregs[REG_EIP] += len;
 }
+#endif
 
 static void OpenWav(void)
 {
@@ -215,6 +221,7 @@ int main(void)
 
     signal(SIGSEGV, OnCrash);
     signal(SIGBUS, OnCrash);
+#ifdef __i386__
     {
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
@@ -222,6 +229,7 @@ int main(void)
         sa.sa_flags = SA_SIGINFO | SA_NODEFER;
         sigaction(SIGFPE, &sa, NULL);
     }
+#endif
     signal(SIGABRT, OnCrash);
     if ((s = getenv("PKR_OUT")) != NULL)
         sOutDir = s;
@@ -251,3 +259,51 @@ int main(void)
     Port_RunGame();
     return 0;
 }
+
+long Platform_ReadFile(const char *name, void *data, unsigned long size)
+{
+    char path[1100];
+    FILE *f;
+    long n;
+    snprintf(path, sizeof(path), "%s/%s", sOutDir, name);
+    f = fopen(path, "rb");
+    if (!f)
+        return -1;
+    n = (long)fread(data, 1, size, f);
+    fclose(f);
+    return n;
+}
+
+int Platform_WriteFile(const char *name, const void *data, unsigned long size)
+{
+    char path[1100];
+    FILE *f;
+    snprintf(path, sizeof(path), "%s/%s", sOutDir, name);
+    f = fopen(path, "wb");
+    if (!f)
+        return -1;
+    fwrite(data, 1, size, f);
+    fclose(f);
+    return 0;
+}
+
+int Platform_PaceAllowsRender(void)
+{
+    return 1;
+}
+
+#ifdef __arm__
+/* Integer division by zero: the GBA and the Vita return 0; Linux' libgcc
+ * would raise SIGFPE. */
+int __aeabi_idiv0(int r)
+{
+    (void)r;
+    return 0;
+}
+
+long long __aeabi_ldiv0(long long r)
+{
+    (void)r;
+    return 0;
+}
+#endif

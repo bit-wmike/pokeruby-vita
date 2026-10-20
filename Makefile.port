@@ -31,6 +31,19 @@ LDLIBS := -lm -pthread -rdynamic
 PLATFORM_SRC := $(wildcard platform/host/*.c)
 OUT := $(BUILD)/pokemon_host
 DATA_FILTER := $(PYTHON) tools/port/as_host.py
+else ifeq ($(TARGET),armhost)
+# The headless runner built for 32-bit ARMv7 hard-float like the Vita and run
+# under qemu-arm, linked at the Vita's address range: checks the ARM path
+# (original data assembly, ARM code generation, high addresses).
+CC := arm-linux-gnueabihf-gcc-14
+AS := arm-linux-gnueabihf-as
+OBJCOPY := arm-linux-gnueabihf-objcopy
+ARCHFLAGS := -march=armv7-a -mtune=cortex-a9 -mfpu=neon -mfloat-abi=hard -mthumb
+OPT ?= -O2 -g
+LDLIBS := -lm -pthread -static -Wl,-Ttext-segment=0x81000000
+PLATFORM_SRC := $(wildcard platform/host/*.c)
+OUT := $(BUILD)/pokemon_armhost
+DATA_FILTER := $(PYTHON) tools/port/as_host.py --arm
 else ifeq ($(TARGET),vita)
 VITASDK ?= /usr/local/vitasdk
 CC := $(VITASDK)/bin/arm-vita-eabi-gcc
@@ -47,7 +60,8 @@ OUT := $(BUILD)/pokemon_vita.elf
 DATA_FILTER := $(PYTHON) tools/port/as_host.py --arm
 endif
 
-GAME_DEFS := -D $(GAME_UPPER) -D REVISION=0 -D GERMAN -D DEBUG=0 -D MODERN=1 -D NONMATCHING -D PORT
+VERSION := $(shell cat platform/vita/VERSION)
+GAME_DEFS := -DPKR_PORT_VERSION=\"$(VERSION)\" -D $(GAME_UPPER) -D REVISION=0 -D GERMAN -D DEBUG=0 -D MODERN=1 -D NONMATCHING -D PORT
 ASDEFS := --defsym $(GAME_UPPER)=1 --defsym REVISION=0 --defsym GERMAN=1 --defsym DEBUG=0 --defsym DEBUG_FIX=0 --defsym MODERN=1
 
 # Helper threads of the renderer (0 = render on the main thread only).
@@ -85,7 +99,7 @@ $(OUT): $(GAME_OBJ) $(DATA_OBJ) $(PORT_OBJ) $(GEN_OBJ)
 # game's variables.
 $(BUILD)/src/%.o: src/%.c tools/port/naked2c.py tools/port/asm2c.py port/asm_rt.h
 	@mkdir -p $(dir $@)
-	@$(CC) $(ARCHFLAGS) -E $(GAME_DEFS) $(INCLUDES) -iquote $(dir $<) $< -o $(BUILD)/src/$*.i
+	@$(CC) $(ARCHFLAGS) -std=gnu11 -E $(GAME_DEFS) $(INCLUDES) -iquote $(dir $<) $< -o $(BUILD)/src/$*.i
 	@$(PREPROC) $(BUILD)/src/$*.i charmap.txt > $(BUILD)/src/$*.pp0.c
 	@$(PYTHON) tools/port/naked2c.py $(BUILD)/src/$*.pp0.c $(BUILD)/src/$*.pp.c --obj $(GBA_BUILD)/src/$*.o
 	$(CC) $(GAME_CFLAGS) -c -x c $(BUILD)/src/$*.pp.c -o $@
@@ -110,10 +124,13 @@ $(GEN)/mem.s: tools/port/gen_mem.py $(GBA_MAP)
 $(GEN)/mem.o: $(GEN)/mem.s
 	$(AS) -o $@ $<
 
-# The assembly part of the m4a sound engine, translated to C.
+# The assembly part of the m4a sound engine, translated to C. MPlayMain
+# (0xc54: adds r5, r5, #0x50; bgt) loops while a track pointer is "positive",
+# which GBA RAM addresses always are and Vita addresses are not.
 $(GEN)/m4a_gen.c: tools/port/asm2c_flat.py tools/port/asm2c.py tools/port/naked2c.py $(GBA_BUILD)/src/libs/m4a_1.o
 	@mkdir -p $(GEN)
-	$(PYTHON) tools/port/asm2c_flat.py --obj $(GBA_BUILD)/src/libs/m4a_1.o --out $@ --map SoundMainRAM_Buffer=SoundMainRAM
+	$(PYTHON) tools/port/asm2c_flat.py --obj $(GBA_BUILD)/src/libs/m4a_1.o --out $@ --map SoundMainRAM_Buffer=SoundMainRAM \
+		--gba-address-flags 0xc54
 $(GEN)/m4a_gen.o: $(GEN)/m4a_gen.c port/asm_rt.h
 	$(CC) $(PORT_CFLAGS) -Wno-unused-label -Wno-unused-but-set-variable -O2 $(INCLUDES) -c $< -o $@
 
@@ -126,17 +143,48 @@ $(BUILD)/port/ppu/%.o: port/ppu/%.c
 # (tools/port/naked2c.py) as the game code.
 $(BUILD)/port/%.o: port/%.c tools/port/naked2c.py
 	@mkdir -p $(dir $@)
-	@$(CC) $(ARCHFLAGS) -E $(GAME_DEFS) $(PPU_DEFS) $(INCLUDES) $< -o $(BUILD)/port/$*.i
+	@$(CC) $(ARCHFLAGS) -std=gnu11 -E $(GAME_DEFS) $(PPU_DEFS) $(INCLUDES) $< -o $(BUILD)/port/$*.i
 	@$(PYTHON) tools/port/naked2c.py $(BUILD)/port/$*.i $(BUILD)/port/$*.pp.c
 	$(CC) $(PORT_CFLAGS) -c -x c $(BUILD)/port/$*.pp.c -o $@
 
 $(BUILD)/platform/%.o: platform/%.c tools/port/naked2c.py
 	@mkdir -p $(dir $@)
-	@$(CC) $(ARCHFLAGS) -E $(GAME_DEFS) $(PPU_DEFS) $(INCLUDES) $< -o $(BUILD)/platform/$*.i
+	@$(CC) $(ARCHFLAGS) -std=gnu11 -E $(GAME_DEFS) $(PPU_DEFS) $(INCLUDES) $< -o $(BUILD)/platform/$*.i
 	@$(PYTHON) tools/port/naked2c.py $(BUILD)/platform/$*.i $(BUILD)/platform/$*.pp.c
 	$(CC) $(PORT_CFLAGS) -c -x c $(BUILD)/platform/$*.pp.c -o $@
+
+# ---- PS Vita package ----
+ifeq ($(GAME),ruby)
+TITLE_ID := PKRU00001
+TITLE := Pokémon Rubin
+VPK_NAME := PokemonRubin_Vita
+else
+TITLE_ID := PKSA00001
+TITLE := Pokémon Saphir
+VPK_NAME := PokemonSaphir_Vita
+endif
+VPK := $(BUILD)/$(VPK_NAME)_$(VERSION).vpk
+SCE := platform/vita/sce_sys_$(GAME)
+# Optional personal LiveArea artwork in platform/vita/sce_sys_local_$(GAME)/
+# (same layout). The folder is git-ignored, so third-party art never lands in
+# the repository; missing files fall back to the art in sce_sys_$(GAME)/.
+ART = $(if $(wildcard platform/vita/sce_sys_local_$(GAME)/$(1)),platform/vita/sce_sys_local_$(GAME)/$(1),$(SCE)/$(1))
+
+vpk: $(VPK)
+
+$(VPK): $(OUT) $(call ART,icon0.png) $(call ART,livearea/contents/bg.png) $(call ART,livearea/contents/startup.png) platform/vita/template.xml platform/vita/VERSION
+	$(VITASDK)/bin/vita-elf-create $(OUT) $(BUILD)/pokemon.velf
+	$(VITASDK)/bin/vita-make-fself -s -c $(BUILD)/pokemon.velf $(BUILD)/eboot.bin
+	$(VITASDK)/bin/vita-mksfoex -s TITLE_ID=$(TITLE_ID) -s APP_VER=01.00 -d ATTRIBUTE2=12 "$(TITLE)" $(BUILD)/param.sfo
+	$(VITASDK)/bin/vita-pack-vpk -s $(BUILD)/param.sfo -b $(BUILD)/eboot.bin \
+	    -a $(call ART,icon0.png)=sce_sys/icon0.png \
+	    -a $(call ART,livearea/contents/bg.png)=sce_sys/livearea/contents/bg.png \
+	    -a $(call ART,livearea/contents/startup.png)=sce_sys/livearea/contents/startup.png \
+	    -a platform/vita/template.xml=sce_sys/livearea/contents/template.xml \
+	    $@
+	cp $(OUT) $(BUILD)/pokemon_$(GAME)_vita-$(VERSION).elf
 
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all clean
+.PHONY: all clean vpk

@@ -4,6 +4,7 @@
  * ignored - the game keeps its own offset in the save (the same as with a
  * working cartridge battery).
  */
+#include <stdlib.h>
 #include <time.h>
 
 #include "global.h"
@@ -18,6 +19,9 @@ static void ReadClock(struct SiiRtcInfo *rtc, int date)
 {
     time_t now = time(NULL);
     struct tm tm;
+    /* PKR_TIME=<unix time>: a fixed clock for reproducible test runs */
+    if (getenv("PKR_TIME"))
+        now = (time_t)atoll(getenv("PKR_TIME"));
     localtime_r(&now, &tm);
     if (date) {
         rtc->year = Bcd(tm.tm_year % 100);
