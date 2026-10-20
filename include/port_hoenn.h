@@ -3,9 +3,12 @@
 #define GUARD_PORT_HOENN_H
 #ifdef PORT
 struct Pokemon;
+int PortExpMultiplier(void);
 u16 PortHoennSpecies(u16 species, u8 level, u8 trainerClass);
 int PortHoennIsBoss(u16 trainerNum, u8 trainerClass);
 u16 PortHoennBossLook(u16 trainerNum, u16 species);
+u16 PortHoennBossSpecies(u16 trainerNum, int slot, u16 species);
+int PortHoennBossMoves(u16 trainerNum, int slot, u16 originalSpecies, struct Pokemon *mon);
 void PortHoennClearLooks(void);
 void PortHoennSetLook(int slot, struct Pokemon *mon, u16 look);
 u16 PortHoennLook(struct Pokemon *mon, u16 species);

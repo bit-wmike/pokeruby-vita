@@ -1049,12 +1049,24 @@ void sub_800F838(struct Sprite *sprite)
 // "Nur Hoenn": ordinary trainers get real Hoenn Pokémon (with their own
 // level-up moves), bosses keep theirs and only look different.
 #define PORT_TRAINER_SPECIES(species, level) \
-    (PortHoennIsBoss(trainerNum, gTrainers[trainerNum].trainerClass) ? (species) \
+    (PortHoennIsBoss(trainerNum, gTrainers[trainerNum].trainerClass) ? PortHoennBossSpecies(trainerNum, i, species) \
      : PortHoennSpecies(species, level, gTrainers[trainerNum].trainerClass))
 #define PORT_TRAINER_KEEPS_MOVES(species, level) (PORT_TRAINER_SPECIES(species, level) == (species))
 #else
 #define PORT_TRAINER_SPECIES(species, level) (species)
 #define PORT_TRAINER_KEEPS_MOVES(species, level) TRUE
+#endif
+#ifdef PORT
+static u16 PortHoennPartySpecies(u16 trainerNum, int i)
+{
+    switch (gTrainers[trainerNum].partyFlags)
+    {
+    case 0: return gTrainers[trainerNum].party.NoItemDefaultMoves[i].species;
+    case F_TRAINER_PARTY_CUSTOM_MOVESET: return gTrainers[trainerNum].party.NoItemCustomMoves[i].species;
+    case F_TRAINER_PARTY_HELD_ITEM: return gTrainers[trainerNum].party.ItemDefaultMoves[i].species;
+    default: return gTrainers[trainerNum].party.ItemCustomMoves[i].species;
+    }
+}
 #endif
 u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
 {
@@ -1151,9 +1163,14 @@ u8 CreateNPCTrainerParty(struct Pokemon *party, u16 trainerNum)
 #ifdef PORT
             if (PortHoennIsBoss(trainerNum, gTrainers[trainerNum].trainerClass))
             {
-                u16 look = PortHoennBossLook(trainerNum, GetMonData(&party[i], MON_DATA_SPECIES));
-                if (look != SPECIES_NONE)
-                    PortHoennSetLook(i, &party[i], look);
+                // real replacement with hand-picked moves, else the look-alike
+                u16 orig = PortHoennPartySpecies(trainerNum, i);
+                if (!PortHoennBossMoves(trainerNum, i, orig, &party[i]))
+                {
+                    u16 look = PortHoennBossLook(trainerNum, GetMonData(&party[i], MON_DATA_SPECIES));
+                    if (look != SPECIES_NONE)
+                        PortHoennSetLook(i, &party[i], look);
+                }
             }
 #endif
         }

@@ -5,7 +5,7 @@
 
 #include "port/port_config.h"
 
-struct PortConfig gPortConfig = {PORT_VIEW_FULL, PORT_STYLE_PIXEL, 0, 0};
+struct PortConfig gPortConfig = {PORT_VIEW_FULL, PORT_STYLE_PIXEL, 0, 1, 0};
 
 static void Set(const char *key, int v)
 {
@@ -15,6 +15,8 @@ static void Set(const char *key, int v)
         gPortConfig.displayStyle = v;
     else if (!strcmp(key, "frame_rate_30"))
         gPortConfig.frameRate30 = v != 0;
+    else if (!strcmp(key, "exp_multiplier") && (v == 1 || v == 2 || v == 4 || v == 8))
+        gPortConfig.expMult = v;
     else if (!strcmp(key, "only_hoenn"))
         gPortConfig.gen3Wild = v != 0;
 }
@@ -34,6 +36,8 @@ void Port_ConfigLoad(void)
             Set(key, v);
     }
     }
+    if (getenv("PKR_EXP")) /* host build */
+        gPortConfig.expMult = atoi(getenv("PKR_EXP"));
     if (getenv("PKR_HOENN")) /* host build */
         gPortConfig.gen3Wild = atoi(getenv("PKR_HOENN")) != 0;
     if (env) /* host build: PKR_VIEW=0/1 */
@@ -48,12 +52,19 @@ void Port_ConfigSave(void)
                      "wide_view = %d\n"
                      "display_style = %d\n"
                      "frame_rate_30 = %d\n"
-                     "only_hoenn = %d\n",
-                     gPortConfig.viewMode, gPortConfig.displayStyle, gPortConfig.frameRate30, gPortConfig.gen3Wild);
+                     "only_hoenn = %d\n"
+                     "exp_multiplier = %d\n",
+                     gPortConfig.viewMode, gPortConfig.displayStyle, gPortConfig.frameRate30, gPortConfig.gen3Wild,
+                     gPortConfig.expMult);
     Platform_WriteFile("settings.ini", buf, (unsigned long)n);
 }
 
 int PortGen3Wild(void)
 {
     return gPortConfig.gen3Wild;
+}
+
+int PortExpMultiplier(void)
+{
+    return gPortConfig.expMult >= 1 ? gPortConfig.expMult : 1;
 }

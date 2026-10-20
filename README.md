@@ -21,10 +21,11 @@ code runs directly on the Vita.
 - "Nur Hoenn" (menu, off by default): only third-generation Pokémon. Wild
   encounters use own tables (tools/port/gen3_wild.py, list in
   docs/nur_hoenn_wild.md); trainers, Team Aqua/Magma, static encounters
-  and in-game trades get real Hoenn Pokémon; gym leaders, Elite Four,
-  champion, Aqua/Magma leaders and Heiko keep their Pokémon (stats, moves,
-  level) but look like a Hoenn Pokémon of the same kind (port/port_hoenn.c).
+  and in-game trades get real Hoenn Pokémon; for the bosses (gym leaders,
+  champion, Aqua/Magma leaders, Heiko) they are picked by hand with the
+  original's weaknesses and matching moves (port/port_hoenn.c).
   Saves stay normal.
+- Cheat in the menu: EXP ×1 / ×2 / ×4 / ×8.
 - Next: battle/menu presentation, weather at the edges, quick-save,
   map overlay; Ruby.
 

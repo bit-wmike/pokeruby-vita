@@ -125,7 +125,7 @@ int PortHoennIsBoss(u16 trainerNum, u8 trainerClass)
     return trainerClass == TRAINER_CLASS_LEADER || trainerClass == TRAINER_CLASS_ELITE_FOUR ||
            trainerClass == TRAINER_CLASS_CHAMPION || trainerClass == TRAINER_CLASS_AQUA_LEADER ||
            trainerClass == TRAINER_CLASS_MAGMA_LEADER ||
-           (trainerNum >= TRAINER_WALLY_1 && trainerNum <= TRAINER_WALLY_1 + 5);
+           trainerNum == TRAINER_WALLY_1 || (trainerNum >= TRAINER_WALLY_2 && trainerNum <= TRAINER_WALLY_6);
 }
 
 /* look-alike of the same kind (type), for display only */
@@ -146,6 +146,72 @@ u16 PortHoennBossLook(u16 trainerNum, u16 species)
     case SPECIES_CROBAT: return SPECIES_DUSTOX;
     }
     return SPECIES_NONE;
+}
+
+/* ---- bosses: real Hoenn Pokémon, picked by hand ---------------------
+ * Same level and role; the replacement keeps the original's weaknesses
+ * where possible (e.g. Roxanne's Geodude -> Baltoy, also weak to water and
+ * grass), so the fights stay fair for every starter. Moves are chosen to
+ * match the original's strength. Bosses missing here fall back to the
+ * look-alike (PortHoennBossLook). */
+#include "constants/moves.h"
+static const struct {
+    u16 trainer;
+    u8 slot;
+    u16 species;
+    u16 moves[4];
+} sBossMons[] = {
+    {TRAINER_ROXANNE, 0, SPECIES_BALTOY, {MOVE_ROCK_TOMB, MOVE_CONFUSION, MOVE_HARDEN, MOVE_MUD_SLAP}},
+    {TRAINER_BRAWLY, 0, SPECIES_MEDITITE, {MOVE_KARATE_CHOP, MOVE_CONFUSION, MOVE_BULK_UP, MOVE_DETECT}},
+    {TRAINER_WATTSON, 0, SPECIES_ELECTRIKE, {MOVE_THUNDER_WAVE, MOVE_SHOCK_WAVE, MOVE_QUICK_ATTACK, MOVE_LEER}},
+    {TRAINER_WATTSON, 1, SPECIES_MINUN, {MOVE_SPARK, MOVE_QUICK_ATTACK, MOVE_THUNDER_WAVE, MOVE_ENCORE}},
+    {TRAINER_WATTSON, 2, SPECIES_MANECTRIC, {MOVE_SHOCK_WAVE, MOVE_THUNDER_WAVE, MOVE_QUICK_ATTACK, MOVE_HOWL}},
+    {TRAINER_FLANNERY, 0, SPECIES_NUMEL, {MOVE_OVERHEAT, MOVE_MAGNITUDE, MOVE_FOCUS_ENERGY, MOVE_SUNNY_DAY}},
+    {TRAINER_FLANNERY, 1, SPECIES_NUMEL, {MOVE_FLAMETHROWER, MOVE_ROCK_SLIDE, MOVE_AMNESIA, MOVE_SUNNY_DAY}},
+    {TRAINER_WINONA, 2, SPECIES_TROPIUS, {MOVE_AERIAL_ACE, MOVE_RAZOR_LEAF, MOVE_STOMP, MOVE_SYNTHESIS}},
+    {TRAINER_WALLACE, 3, SPECIES_GOREBYSS, {MOVE_WATER_PULSE, MOVE_RAIN_DANCE, MOVE_PSYCHIC, MOVE_AMNESIA}},
+    {TRAINER_STEVEN, 0, SPECIES_SOLROCK, {MOVE_ROCK_SLIDE, MOVE_PSYCHIC, MOVE_COSMIC_POWER, MOVE_FLAMETHROWER}},
+    {TRAINER_ARCHIE_2, 1, SPECIES_CRAWDAUNT, {MOVE_CRABHAMMER, MOVE_CRUNCH, MOVE_KNOCK_OFF, MOVE_TAUNT}},
+    {TRAINER_ARCHIE_3, 1, SPECIES_CORPHISH, {MOVE_BUBBLE_BEAM, MOVE_KNOCK_OFF, MOVE_HARDEN, MOVE_LEER}},
+    {TRAINER_MAXIE_2, 1, SPECIES_TORKOAL, {MOVE_FLAMETHROWER, MOVE_BODY_SLAM, MOVE_PROTECT, MOVE_AMNESIA}},
+    {TRAINER_MAXIE_3, 1, SPECIES_TORKOAL, {MOVE_EMBER, MOVE_SMOG, MOVE_CURSE, MOVE_SMOKESCREEN}},
+    {TRAINER_WALLY_1, 3, SPECIES_MANECTRIC, {MOVE_THUNDERBOLT, MOVE_QUICK_ATTACK, MOVE_THUNDER_WAVE, MOVE_HOWL}},
+    {TRAINER_WALLY_3, 3, SPECIES_MANECTRIC, {MOVE_THUNDERBOLT, MOVE_QUICK_ATTACK, MOVE_THUNDER_WAVE, MOVE_HOWL}},
+    {TRAINER_WALLY_4, 3, SPECIES_MANECTRIC, {MOVE_THUNDERBOLT, MOVE_QUICK_ATTACK, MOVE_THUNDER_WAVE, MOVE_HOWL}},
+    {TRAINER_WALLY_5, 3, SPECIES_MANECTRIC, {MOVE_THUNDERBOLT, MOVE_QUICK_ATTACK, MOVE_THUNDER_WAVE, MOVE_HOWL}},
+    {TRAINER_WALLY_6, 3, SPECIES_MANECTRIC, {MOVE_THUNDERBOLT, MOVE_QUICK_ATTACK, MOVE_THUNDER_WAVE, MOVE_HOWL}},
+};
+
+static int BossIndex(u16 trainerNum, int slot, u16 species)
+{
+    unsigned i;
+    if (!gPortConfig.gen3Wild || IsGen3(species))
+        return -1;
+    for (i = 0; i < sizeof(sBossMons) / sizeof(sBossMons[0]); i++)
+        if (sBossMons[i].trainer == trainerNum && sBossMons[i].slot == slot)
+            return (int)i;
+    return -1;
+}
+
+u16 PortHoennBossSpecies(u16 trainerNum, int slot, u16 species)
+{
+    int k = BossIndex(trainerNum, slot, species);
+    return k < 0 ? species : sBossMons[k].species;
+}
+
+/* after CreateMon: the hand-picked moves; 1 if the boss mon was replaced */
+int PortHoennBossMoves(u16 trainerNum, int slot, u16 originalSpecies, struct Pokemon *mon)
+{
+    int k = BossIndex(trainerNum, slot, originalSpecies), j;
+    if (k < 0)
+        return 0;
+    for (j = 0; j < 4; j++) {
+        u16 m = sBossMons[k].moves[j];
+        u8 pp = gBattleMoves[m].pp;
+        SetMonData(mon, MON_DATA_MOVE1 + j, &m);
+        SetMonData(mon, MON_DATA_PP1 + j, &pp);
+    }
+    return 1;
 }
 
 /* The looks of the enemy party, tied to the exact Pokémon (species and

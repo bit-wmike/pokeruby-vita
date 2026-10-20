@@ -294,7 +294,7 @@ static void AudioInit(void)
 
 /* ---------------------------------------------------- menu (START+SELECT) */
 
-enum { MI_VIEW, MI_STYLE, MI_FPS, MI_HOENN, MI_BACK, MI_COUNT };
+enum { MI_VIEW, MI_STYLE, MI_FPS, MI_HOENN, MI_EXP, MI_BACK, MI_COUNT };
 
 static void MenuLine(int item, char *buf, size_t size)
 {
@@ -305,6 +305,7 @@ static void MenuLine(int item, char *buf, size_t size)
         case MI_STYLE: snprintf(buf, size, "Bilddarstellung: %s", styles[gPortConfig.displayStyle]); break;
         case MI_FPS: snprintf(buf, size, "Bildrate: %s", gPortConfig.frameRate30 ? "30 (Spieltempo bleibt)" : "60"); break;
         case MI_HOENN: snprintf(buf, size, "Pokemon: %s", gPortConfig.gen3Wild ? "Nur Hoenn (3. Gen.)" : "Original"); break;
+        case MI_EXP: snprintf(buf, size, "Cheat EP: %dx", gPortConfig.expMult); break;
         default: snprintf(buf, size, "Zurueck zum Spiel"); break;
     }
 }
@@ -322,6 +323,14 @@ static int MenuChange(int item, int d)
         case MI_STYLE: gPortConfig.displayStyle = Wrap(gPortConfig.displayStyle, d ? d : 1, 3); break;
         case MI_FPS: gPortConfig.frameRate30 ^= 1; break;
         case MI_HOENN: gPortConfig.gen3Wild ^= 1; break;
+        case MI_EXP: {
+            static const int steps[] = {1, 2, 4, 8};
+            int k = 0;
+            while (k < 3 && steps[k] != gPortConfig.expMult)
+                k++;
+            gPortConfig.expMult = steps[Wrap(k, d ? d : 1, 4)];
+            break;
+        }
         case MI_BACK:
             if (d == 0)
                 return 1;

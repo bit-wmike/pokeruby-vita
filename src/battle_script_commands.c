@@ -3457,6 +3457,10 @@ static void atk23_getexp(void)
                     {
                         i = 0x149;
                     }
+#ifdef PORT
+                    // port cheat: EXP x1 / x2 / x4 / x8 (START+SELECT menu)
+                    gBattleMoveDamage *= PortExpMultiplier();
+#endif
 
                     // get exp getter bank
                     if (gBattleTypeFlags & BATTLE_TYPE_DOUBLE)
