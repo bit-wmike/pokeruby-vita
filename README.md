@@ -1,8 +1,8 @@
 # Pokémon Saphir / Rubin (German) – native PS Vita port
 
 A native port of the German Pokémon Sapphire / Ruby to the PS Vita, built
-from the [pret/pokeruby](https://github.com/pret/pokeruby) decompilation (see
-`docs/` and `INSTALL.md` for the decomp itself). No emulator: the game's C
+from the [pret/pokeruby](https://github.com/pret/pokeruby) decompilation (its README:
+`README-decomp.md`, setup: `INSTALL.md`). No emulator: the game's C
 code runs directly on the Vita.
 
 ## Status (0.1.0)
