@@ -33,6 +33,8 @@ extern unsigned char gHostFlash[0x20000];
 /* Runs the game forever (AgbMain, restarted on soft reset). */
 void Port_RunGame(void);
 uint32_t Port_FrameCounter(void);
+int Port_StateDumpTo(const char *name);   /* port_state.c */
+void Port_DescribeHang(void);            /* port_state.c: callbacks, tasks to the log */
 /* Flash save changed (port/host_flash.c): written out by the core. */
 void Port_FlashDirty(void);
 

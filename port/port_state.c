@@ -18,6 +18,9 @@
 #include <stdint.h>
 
 #include "port/port.h"
+#include "global.h"
+#include "main.h"
+#include "task.h"
 #include "port/port_config.h"
 
 extern unsigned char gHostOam[0x400];
@@ -77,7 +80,13 @@ static void FillHeader(struct Header *h, const struct Block *b, int n)
     }
 }
 
+static int DoSaveTo(uintptr_t anchor, const char *name);
 static int DoSave(uintptr_t anchor)
+{
+    return DoSaveTo(anchor, "savestate.bin");
+}
+
+static int DoSaveTo(uintptr_t anchor, const char *name)
 {
     struct Block b[16];
     struct Header h;
@@ -94,7 +103,7 @@ static int DoSave(uintptr_t anchor)
         memcpy(p, b[i].p, b[i].size);
         p += b[i].size;
     }
-    i = Platform_WriteFile("savestate.bin", buf, (unsigned long)(sizeof(h) + h.total));
+    i = Platform_WriteFile(name, buf, (unsigned long)(sizeof(h) + h.total));
     free(buf);
     return i == 0;
 }
@@ -142,6 +151,13 @@ static int DoLoad(uintptr_t anchor)
     return 1;
 }
 
+/* From another thread (the Vita hang watchdog): the state as it is, for
+ * reproducing on the PC (tools/state/vita2host.py). */
+int Port_StateDumpTo(const char *name)
+{
+    return DoSaveTo(0, name);
+}
+
 void Port_StateRequest(int load)
 {
     sPending = load ? 2 : 1;
@@ -169,4 +185,16 @@ void Port_StateFrame(void)
     sResult = (sPending == 1 ? DoSave((uintptr_t)&anchor) : DoLoad((uintptr_t)&anchor)) ? 1 : -1;
     Platform_Log("[state] %s %s\n", sPending == 1 ? "save" : "load", sResult > 0 ? "ok" : "failed");
     sPending = 0;
+}
+
+/* What the game was doing (the Vita hang watchdog): the callbacks and the
+ * active tasks, as addresses (to look up in the ELF). */
+void Port_DescribeHang(void)
+{
+    int i;
+    Platform_Log("[hang] cb1=%p cb2=%p vblank=%p inBattle=%d\n", (void *)gMain.callback1, (void *)gMain.callback2,
+                 (void *)gMain.vblankCallback, gMain.inBattle);
+    for (i = 0; i < NUM_TASKS; i++)
+        if (gTasks[i].isActive)
+            Platform_Log("[hang] task %d func=%p\n", i, (void *)gTasks[i].func);
 }

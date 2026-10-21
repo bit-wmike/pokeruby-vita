@@ -13,7 +13,16 @@ struct PortConfig {
     int expMult;      /* cheat: EXP multiplier 1/2/4/8 */
     int gen3Wild;     /* "Nur Hoenn": only gen-3 wild Pokémon */
     int turbo;        /* turbo factor (right stick up held): 2..4 */
+    /* button mapping in the game (not the port menu): the GBA function of
+     * each Vita button, PORT_KEY_* - order of PORT_BTN_* */
+    int keymap[8];
 };
+
+enum { PORT_BTN_CROSS, PORT_BTN_CIRCLE, PORT_BTN_SQUARE, PORT_BTN_TRIANGLE, PORT_BTN_L, PORT_BTN_R,
+       PORT_BTN_START, PORT_BTN_SELECT, PORT_BTN_COUNT };
+enum { PORT_KEY_NONE, PORT_KEY_A, PORT_KEY_B, PORT_KEY_START, PORT_KEY_SELECT, PORT_KEY_L, PORT_KEY_R,
+       PORT_KEY_COUNT };
+extern const char *const gPortBtnNames[PORT_BTN_COUNT];   /* settings keys */
 
 /* cheats of the session (not saved) */
 struct PortCheats {

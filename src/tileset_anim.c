@@ -472,6 +472,17 @@ void sub_8072E74(void)
     int i;
     for (i = 0; i < gNumTilesetAnimDmas; i++)
     {
+#ifdef PORT
+        {   /* a bad entry (overwritten queue) would copy anywhere */
+            extern u8 gHostVram[];
+            void Platform_Log(const char *fmt, ...);
+            const u8 *d = gTilesetAnimDmas[i].dest;
+            if (d < gHostVram || d + gTilesetAnimDmas[i].size > gHostVram + 0x18000 || gTilesetAnimDmas[i].size > 0x1000) {
+                Platform_Log("[anim] bad tileset DMA %d dest=%p size=%u - skipped\n", i, (void *)d, gTilesetAnimDmas[i].size);
+                continue;
+            }
+        }
+#endif
         DmaCopy16(3,
             gTilesetAnimDmas[i].src,
             gTilesetAnimDmas[i].dest,

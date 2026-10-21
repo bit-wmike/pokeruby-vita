@@ -72,6 +72,7 @@ void Platform_Log(const char *fmt, ...)
 
 /* -------------------------------------------------------------- video */
 
+volatile int gVitaPhase;   /* hang watchdog: 1 game, 2 GPU wait, 3 upload/draw, 4 swap */
 static vita2d_texture *sTex;
 /* battle layers (Platform_PresentBattle) */
 static vita2d_texture *sStageTex, *sFieldTex, *sUiTex, *sHudTex;
@@ -290,7 +291,9 @@ void Platform_Present(const uint32_t *pixels, int width, int height, int pitch, 
     int y;
 
     PerfFrame(sceKernelGetProcessTimeWide());
+    gVitaPhase = 2;
     vita2d_wait_rendering_done();
+    gVitaPhase = 3;
     dst = (uint8_t *)vita2d_texture_get_datap(sTex);
     stride = vita2d_texture_get_stride(sTex);
     for (y = 0; y < height; y++)
@@ -304,14 +307,18 @@ void Platform_Present(const uint32_t *pixels, int width, int height, int pitch, 
     DrawGame();
     vita2d_end_drawing();
     WaitDue();
+    gVitaPhase = 4;
     vita2d_swap_buffers();
+    gVitaPhase = 1;
     sLastPresentEnd = sceKernelGetProcessTimeWide();
 }
 
 void Platform_PresentBattle(const PortBattleFrame *f)
 {
     PerfFrame(sceKernelGetProcessTimeWide());
+    gVitaPhase = 2;
     vita2d_wait_rendering_done();
+    gVitaPhase = 3;
     if (f->stageSerial != sStageSerial || !sBattleOn) {
         Upload(sStageTex, f->stage, 480, 272, 480);
         sStageSerial = f->stageSerial;
@@ -329,8 +336,54 @@ void Platform_PresentBattle(const PortBattleFrame *f)
     DrawGame();
     vita2d_end_drawing();
     WaitDue();
+    gVitaPhase = 4;
     vita2d_swap_buffers();
+    gVitaPhase = 1;
     sLastPresentEnd = sceKernelGetProcessTimeWide();
+}
+
+/* ----------------------------------------------------- hang watchdog */
+
+/* A frozen game (no frame for 5 s, the menu aside) writes what it was doing
+ * to the log and its state to haenger_zustand.bin, which converts for the
+ * PC build (tools/state/vita2host.py). */
+int main(int argc, char **argv);
+static volatile int sMenuOpen;
+extern volatile int gVitaPhase;
+
+static int WatchdogThread(SceSize args, void *argp)
+{
+    unsigned last = ~0u;
+    int still = 0, done = 0;
+    (void)args;
+    (void)argp;
+    for (;;) {
+        unsigned f;
+        sceKernelDelayThread(500 * 1000);
+        f = Port_FrameCounter();
+        if (sMenuOpen || f != last) {
+            last = f;
+            still = 0;
+            continue;
+        }
+        if (++still < 10 || done)
+            continue;
+        done = 1;
+        {
+            void Port_DescribeHang(void);
+            Platform_Log("[hang] no frame for 5 s at frame %u, phase %d, main=%p\n", f, gVitaPhase, (void *)&main);
+            Port_DescribeHang();
+            Platform_Log("[hang] state %s\n", Port_StateDumpTo("haenger_zustand.bin") ? "written" : "failed");
+        }
+    }
+    return 0;
+}
+
+static void WatchdogInit(void)
+{
+    SceUID th = sceKernelCreateThread("pkmn_watchdog", WatchdogThread, 0x10000100, 0x4000, 0, 0, NULL);
+    if (th >= 0)
+        sceKernelStartThread(th, 0, NULL);
 }
 
 /* -------------------------------------------------------------- audio */
@@ -413,12 +466,14 @@ enum {
     MI_H_GAME, MI_HOENN, MI_TURBO,
     MI_H_CHEATS, MI_EXP, MI_MONEY, MI_ENC, MI_SHINY, MI_RANDOM, MI_FLEE, MI_RUN,
     MI_H_STATE, MI_SAVE, MI_LOAD,
-    MI_BACK, MI_COUNT
+    MI_BACK,
+    MI_H_KEYS, MI_K0, MI_K7 = MI_K0 + PORT_BTN_COUNT - 1,   /* right column */
+    MI_COUNT
 };
 
 static int IsHeader(int item)
 {
-    return item == MI_H_DISPLAY || item == MI_H_GAME || item == MI_H_CHEATS || item == MI_H_STATE;
+    return item == MI_H_DISPLAY || item == MI_H_GAME || item == MI_H_CHEATS || item == MI_H_STATE || item == MI_H_KEYS;
 }
 
 static char sMenuNote[96];
@@ -428,6 +483,12 @@ static void MenuLine(int item, char *buf, size_t size)
     static const char *views[] = {"GBA (240x160)", "Weitsicht (480x272)"};
     static const char *enc[] = {"Aus", "Normal", "Hoch"};
     const char *onoff[] = {"Aus", "An"};
+    if (item >= MI_K0 && item <= MI_K7) {
+        static const char *btn[PORT_BTN_COUNT] = {"Kreuz", "Kreis", "Viereck", "Dreieck", "L", "R", "START", "SELECT"};
+        static const char *fn[PORT_KEY_COUNT] = {"-", "A", "B", "START", "SELECT", "L", "R"};
+        snprintf(buf, size, "%s: %s", btn[item - MI_K0], fn[gPortConfig.keymap[item - MI_K0]]);
+        return;
+    }
     switch (item) {
         case MI_H_DISPLAY: snprintf(buf, size, "ANZEIGE"); break;
         case MI_VIEW: snprintf(buf, size, "Ansicht: %s", views[gPortConfig.viewMode]); break;
@@ -446,6 +507,7 @@ static void MenuLine(int item, char *buf, size_t size)
         case MI_FLEE: snprintf(buf, size, "Immer fliehen: %s", onoff[gPortCheats.alwaysFlee]); break;
         case MI_RUN: snprintf(buf, size, "Rennen in Gebaeuden: %s", onoff[gPortCheats.runIndoors]); break;
         case MI_H_STATE: snprintf(buf, size, "SCHNELLSPEICHERN"); break;
+        case MI_H_KEYS: snprintf(buf, size, "TASTEN (nur im Spiel)"); break;
         case MI_SAVE: snprintf(buf, size, "Zustand speichern"); break;
         case MI_LOAD: snprintf(buf, size, "Zustand laden%s", Port_StateExists() ? "" : " (keiner da)"); break;
         default: snprintf(buf, size, "Zurueck zum Spiel"); break;
@@ -461,6 +523,11 @@ static int Wrap(int v, int d, int n)
  * should close. */
 static int MenuChange(int item, int d)
 {
+    if (item >= MI_K0 && item <= MI_K7) {
+        int *k = &gPortConfig.keymap[item - MI_K0];
+        *k = Wrap(*k, d ? d : 1, PORT_KEY_COUNT);
+        return 0;
+    }
     switch (item) {
         case MI_VIEW: gPortConfig.viewMode = Wrap(gPortConfig.viewMode, d ? d : 1, 2); break;
         case MI_STYLE:
@@ -525,6 +592,7 @@ static void RunMenu(void)
     char line[160];
 
     Platform_Log("[ui] menu open\n");
+    sMenuOpen = 1;
     sMenuNote[0] = 0;
     for (;;) {
         SceCtrlData pad;
@@ -551,16 +619,19 @@ static void RunMenu(void)
         vita2d_draw_rectangle(0, 0, 960, 544, RGBA8(0, 0, 0, 200));
         vita2d_pgf_draw_text(sFont, 60, 44, RGBA8(90, 160, 255, 255), 1.2f, GAME_NAME " Vita " PKR_PORT_VERSION);
         for (i = 0, y = 76; i < MI_COUNT; i++) {
+            int cx = i >= MI_H_KEYS ? 560 : 0;   /* the buttons: right column */
+            if (i == MI_H_KEYS)
+                y = 76;
             if (IsHeader(i))
                 y += 8;
             MenuLine(i, line, sizeof(line));
             if (IsHeader(i))
-                vita2d_pgf_draw_text(sFont, 60, y, RGBA8(90, 160, 255, 255), 0.8f, line);
+                vita2d_pgf_draw_text(sFont, cx + 60, y, RGBA8(90, 160, 255, 255), 0.8f, line);
             else
-                vita2d_pgf_draw_text(sFont, 90, y, i == sel ? RGBA8(255, 230, 80, 255) : RGBA8(220, 220, 220, 255),
+                vita2d_pgf_draw_text(sFont, cx + 90, y, i == sel ? RGBA8(255, 230, 80, 255) : RGBA8(220, 220, 220, 255),
                                      0.85f, line);
             if (i == sel)
-                vita2d_pgf_draw_text(sFont, 70, y, RGBA8(255, 230, 80, 255), 0.85f, ">");
+                vita2d_pgf_draw_text(sFont, cx + 70, y, RGBA8(255, 230, 80, 255), 0.85f, ">");
             y += 21;
         }
         if (sMenuNote[0])
@@ -575,6 +646,7 @@ static void RunMenu(void)
             break;
     }
     Port_ConfigSave();
+    sMenuOpen = 0;
     Platform_Log("[ui] menu closed: hoenn=%d view=%d style=%d fps30=%d turbo=%d cheats=%d%d%d%d%d\n",
                  gPortConfig.gen3Wild, gPortConfig.viewMode, gPortConfig.displayStyle, gPortConfig.frameRate30,
                  gPortConfig.turbo, gPortCheats.encounters, gPortCheats.shiny, gPortCheats.randomSpecies,
@@ -603,14 +675,15 @@ uint16_t Platform_PollKeys(void)
         sWaitRelease = 0;
     }
 
-    if (pad.buttons & SCE_CTRL_CROSS) keys |= A_BUTTON;
-    if (pad.buttons & SCE_CTRL_CIRCLE) keys |= B_BUTTON;
-    if (pad.buttons & SCE_CTRL_SQUARE) keys |= B_BUTTON;    /* run */
-    if (pad.buttons & SCE_CTRL_TRIANGLE) keys |= SELECT_BUTTON; /* registered item */
-    if (pad.buttons & SCE_CTRL_LTRIGGER) keys |= L_BUTTON;
-    if (pad.buttons & SCE_CTRL_RTRIGGER) keys |= R_BUTTON;
-    if (pad.buttons & SCE_CTRL_START) keys |= START_BUTTON;
-    if (pad.buttons & SCE_CTRL_SELECT) keys |= SELECT_BUTTON;
+    {   /* the buttons as set in the port menu (TASTEN) */
+        static const unsigned btn[PORT_BTN_COUNT] = {SCE_CTRL_CROSS, SCE_CTRL_CIRCLE, SCE_CTRL_SQUARE, SCE_CTRL_TRIANGLE,
+                                                     SCE_CTRL_LTRIGGER, SCE_CTRL_RTRIGGER, SCE_CTRL_START, SCE_CTRL_SELECT};
+        static const uint16_t gba[PORT_KEY_COUNT] = {0, A_BUTTON, B_BUTTON, START_BUTTON, SELECT_BUTTON, L_BUTTON, R_BUTTON};
+        int b;
+        for (b = 0; b < PORT_BTN_COUNT; b++)
+            if (pad.buttons & btn[b])
+                keys |= gba[gPortConfig.keymap[b] % PORT_KEY_COUNT];
+    }
     if ((pad.buttons & SCE_CTRL_UP) || pad.ly < 128 - 64) keys |= DPAD_UP;
     if ((pad.buttons & SCE_CTRL_DOWN) || pad.ly > 128 + 64) keys |= DPAD_DOWN;
     if ((pad.buttons & SCE_CTRL_LEFT) || pad.lx < 128 - 64) keys |= DPAD_LEFT;
@@ -742,6 +815,7 @@ int main(int argc, char **argv)
     sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
     VideoInit();
     AudioInit();
+    WatchdogInit();
     Port_RunGame();
 
     sceKernelExitProcess(0);

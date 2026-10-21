@@ -193,7 +193,14 @@ EWRAM_DATA u16 gBGTilemapBuffers[4][0x400] = {0};
 EWRAM_DATA u8 gStringVar1[0x100] = {0};
 EWRAM_DATA u8 gStringVar2[0x100] = {0};
 EWRAM_DATA u8 gStringVar3[0x100] = {0};
+#ifdef PORT
+/* 223 German field texts are longer than 0x100 (up to ~900 bytes); on the
+ * GBA they ran on into unused EWRAM after this buffer, in the port into
+ * live data (garbage text, e.g. Norman and Wally in Petalburg Gym) */
+EWRAM_DATA u8 gStringVar4[0x400] = {0};
+#else
 EWRAM_DATA u8 gStringVar4[0x100] = {0};
+#endif
 
 extern u16 gBattleTypeFlags;
 extern u8 gIsLinkContest;

@@ -571,6 +571,38 @@ void PortStage_UiPass(void)
             virtuappu_mode1_obj_dy[i] = 4000;
 }
 
+static void ObjBox(int i, int *x, int *y, int *w, int *h);
+static const u32 *sHudPix;   /* the healthboxes alone (3rd pass) or NULL */
+
+/* Pass 3, only while a window lies over a healthbox (the switch question's
+ * Yes/No box over ours): the healthboxes alone, so that they show whole
+ * at their own place. Returns 0 when not needed. */
+int PortStage_HudPass(void)
+{
+    int i, need = 0, x, y;
+    for (i = 0; i < 128 && !need; i++) {
+        int ox, oy, ow, oh;
+        if (!sUiObj[i] || !IsHud(i))
+            continue;
+        ObjBox(i, &ox, &oy, &ow, &oh);
+        for (y = oy; y < oy + oh && !need; y += 4)
+            for (x = ox; x < ox + ow && !need; x += 4)
+                need = PortView_InWindow(x, y);
+    }
+    if (!need)
+        return 0;
+    ClearKnobs();   /* every BG clipped away */
+    for (i = 0; i < 128; i++)
+        if (!sUiObj[i] || !IsHud(i))
+            virtuappu_mode1_obj_dy[i] = 4000;
+    return 1;
+}
+
+void PortStage_SetHudPixels(const u32 *pix)
+{
+    sHudPix = pix;
+}
+
 static void ObjBox(int i, int *x, int *y, int *w, int *h)
 {
     extern u8 gHostOam[];
@@ -697,6 +729,59 @@ static void Particles(void)
 static PortBlit sBlit[VIRTUAPPU_MODE1_MAX_REGIONS], sHudBlit[128];
 static u32 sHud[PORT_GBA_H][PORT_GBA_W];
 
+/* The battle windows sit in a dark grey band on the GBA (the bottom of the
+ * screen); copied alone they would carry it as an extra frame. Pixels of
+ * the band's colour that reach the window's edge become transparent, so
+ * the boxes stand free like the field message box (Mike's wish, 0.2.9). */
+static void Unframe(u32 *ui, int pitch, const virtuappu_mode1_region *g)
+{
+    static u16 stack[PORT_GBA_W * PORT_GBA_H];
+    static u8 seen[PORT_GBA_H][PORT_GBA_W];
+    int x0 = g->x0 - g->dx, y0 = g->y0 - g->dy, w = g->x1 - g->x0, h = g->y1 - g->y0;
+    int x, y, n = 0, k, best = 0;
+    u32 band = 0, cand[4];
+    if (x0 < 0 || y0 < 0 || x0 + w > PORT_GBA_W || y0 + h > PORT_GBA_H || w < 8 || h < 8)
+        return;
+    /* the band colour: the corners agree on it */
+    cand[0] = ui[y0 * pitch + x0];
+    cand[1] = ui[y0 * pitch + x0 + w - 1];
+    cand[2] = ui[(y0 + h - 1) * pitch + x0];
+    cand[3] = ui[(y0 + h - 1) * pitch + x0 + w - 1];
+    for (k = 0; k < 4; k++) {
+        int m = 0, j;
+        for (j = 0; j < 4; j++)
+            m += cand[j] == cand[k];
+        if (m > best) { best = m; band = cand[k]; }
+    }
+    if (best < 3 || !(band >> 24))
+        return;
+    {   /* only a dark band (not a white box edge) */
+        int r = band & 255, gg = (band >> 8) & 255, b = (band >> 16) & 255;
+        if (r + gg + b > 3 * 128)
+            return;
+    }
+    for (y = y0; y < y0 + h; y++)
+        memset(&seen[y][x0], 0, (size_t)w);
+#define PUSH(px, py) do { if (!seen[py][px] && ui[(py) * pitch + (px)] == band) { seen[py][px] = 1; stack[n++] = (u16)((py) * PORT_GBA_W + (px)); } } while (0)
+    for (x = x0; x < x0 + w; x++) {
+        PUSH(x, y0);
+        PUSH(x, y0 + h - 1);
+    }
+    for (y = y0; y < y0 + h; y++) {
+        PUSH(x0, y);
+        PUSH(x0 + w - 1, y);
+    }
+    while (n > 0) {
+        int p = stack[--n], px = p % PORT_GBA_W, py = p / PORT_GBA_W;
+        ui[py * pitch + px] &= 0x00FFFFFFu;
+        if (px > x0) PUSH(px - 1, py);
+        if (px < x0 + w - 1) PUSH(px + 1, py);
+        if (py > y0) PUSH(px, py - 1);
+        if (py < y0 + h - 1) PUSH(px, py + 1);
+    }
+#undef PUSH
+}
+
 /* After both passes: the frame for the platform. */
 void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
 {
@@ -709,6 +794,8 @@ void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
         serial++;
     lastState = sState;
     Particles();
+    for (i = 0; i < sRegCount; i++)
+        Unframe((u32 *)ui, upitch, &sReg[i]);
     for (i = 0; i < sRegCount; i++) {
         const virtuappu_mode1_region *g = &sReg[i];
         PortBlit *b = &sBlit[nblit++];
@@ -729,7 +816,8 @@ void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
         if (IsHud(i)) {
             for (y = y0; y < y1; y++)
                 for (x = x0; x < x1; x++)
-                    sHud[y][x] = PortView_InWindow(x, y) ? 0 : ui[y * upitch + x];
+                    sHud[y][x] = !PortView_InWindow(x, y) ? ui[y * upitch + x]
+                                 : sHudPix ? sHudPix[y * upitch + x] : 0;
             sHudBlit[nhud].sx = (s16)x0; sHudBlit[nhud].sy = (s16)y0;
             sHudBlit[nhud].w = (s16)(x1 - x0); sHudBlit[nhud].h = (s16)(y1 - y0);
             sHudBlit[nhud].dx = (s16)(x0 + sUiDx[i]); sHudBlit[nhud].dy = (s16)(y0 + sUiDy[i]);

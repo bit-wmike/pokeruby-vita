@@ -276,6 +276,18 @@ static void RenderFrame(void)
         virtuappu_mode1_set_output_buffer(ui, FIELD_W);
         virtuappu_mode1_pre_line_callback = NULL;
         virtuappu_mode1_render_frame(&ppu);
+        {   /* the healthboxes alone when a window covers them */
+            static uint32_t hud[FIELD_W * 160];
+            int PortStage_HudPass(void);
+            void PortStage_SetHudPixels(const uint32_t *pix);
+            if (PortStage_HudPass()) {
+                virtuappu_mode1_set_output_buffer(hud, FIELD_W);
+                virtuappu_mode1_render_frame(&ppu);
+                PortStage_SetHudPixels(hud);
+            } else {
+                PortStage_SetHudPixels(NULL);
+            }
+        }
         STAGE_T(1);
         Port_ProfileEnd(PORT_PROF_RENDER);
         PortStage_Present(field, FIELD_W, ui, FIELD_W);

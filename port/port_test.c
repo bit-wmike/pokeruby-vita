@@ -25,6 +25,7 @@ void sub_809D844(void);
 #include "palette.h"
 #include "global.fieldmap.h"
 #include "constants/species.h"
+#include "event_data.h"
 
 #include "port/port.h"
 
@@ -153,6 +154,18 @@ static void ApplyParty(void)
     gSaveBlock2.optionsBattleStyle = 1;   /* "set": no switch question */
 }
 
+void PortTest_StartTrainer(int trainer)
+{
+    /* double battles need two Pokemon (the game checks that before) */
+    if (CalculatePlayerPartyCount() < 2) {
+        CreateMon(&gPlayerParty[1], SPECIES_ZIGZAGOON, 10, 32, 0, 0, 0, 0);
+        CalculatePlayerPartyCount();
+    }
+    gTrainerBattleOpponent = (u16)trainer;
+    BattleSetup_StartTrainerBattle();
+    fprintf(stderr, "[test] trainer battle %d at frame %u\n", trainer, Port_FrameCounter());
+}
+
 static void TestPlan(void)
 {
     static int init;
@@ -254,6 +267,25 @@ static void TestPlan(void)
             sStepKeys = (int)k;
             sStepLeft = f;
         }
+    } else if (!strncmp(sStep, "setvar", 6)) {   /* setvar <hex var> <value> */
+        unsigned v, val;
+        if (sscanf(sStep + 7, "%x %u", &v, &val) == 2)
+            VarSet((u16)v, (u16)val);
+    } else if (!strncmp(sStep, "flag", 4)) {     /* flag <hex flag> <0|1> */
+        unsigned f, on;
+        if (sscanf(sStep + 5, "%x %u", &f, &on) == 2) {
+            if (on)
+                FlagSet((u16)f);
+            else
+                FlagClear((u16)f);
+        }
+    } else if (!strncmp(sStep, "style", 5)) {    /* style 0: switch question on */
+        gSaveBlock2.optionsBattleStyle = (u8)atoi(sStep + 6);
+    } else if (!strncmp(sStep, "trainer", 7)) {  /* trainer <id>: battle now */
+        if (PortIsOverworld()) {
+            PortTest_StartTrainer(atoi(sStep + 8));
+            sWaitWarp = 1;
+        }
     } else if (!strncmp(sStep, "party", 5)) {
         sParty = 1;
         ApplyParty();
@@ -335,14 +367,7 @@ void PortTest_Frame(void)
     }
     if (tframe >= 0 && (int)Port_FrameCounter() >= tframe && PortIsOverworld()) {
         tframe = -1;
-        /* double battles need two Pokemon (the game checks that before) */
-        if (CalculatePlayerPartyCount() < 2) {
-            CreateMon(&gPlayerParty[1], SPECIES_ZIGZAGOON, 10, 32, 0, 0, 0, 0);
-            CalculatePlayerPartyCount();
-        }
-        gTrainerBattleOpponent = (u16)trainer;
-        BattleSetup_StartTrainerBattle();
-        fprintf(stderr, "[test] trainer battle %d at frame %u\n", trainer, Port_FrameCounter());
+        PortTest_StartTrainer(trainer);
         return;
     }
     if (frame < 0 || (int)Port_FrameCounter() < frame || !PortIsOverworld())

@@ -5,7 +5,11 @@
 
 #include "port/port_config.h"
 
-struct PortConfig gPortConfig = {PORT_VIEW_FULL, PORT_STYLE_PIXEL, 0, 1, 0, 3};
+struct PortConfig gPortConfig = {PORT_VIEW_FULL, PORT_STYLE_PIXEL, 0, 1, 0, 3,
+    /* X: A, O: B, square: B (run), triangle: SELECT (registered item) */
+    {PORT_KEY_A, PORT_KEY_B, PORT_KEY_B, PORT_KEY_SELECT, PORT_KEY_L, PORT_KEY_R, PORT_KEY_START, PORT_KEY_SELECT}};
+const char *const gPortBtnNames[PORT_BTN_COUNT] = {
+    "key_cross", "key_circle", "key_square", "key_triangle", "key_l", "key_r", "key_start", "key_select"};
 struct PortCheats gPortCheats = {1, 0, 0, 0, 0};
 
 static void Set(const char *key, int v)
@@ -22,6 +26,12 @@ static void Set(const char *key, int v)
         gPortConfig.expMult = v;
     else if (!strcmp(key, "only_hoenn"))
         gPortConfig.gen3Wild = v != 0;
+    else {
+        int i;
+        for (i = 0; i < PORT_BTN_COUNT; i++)
+            if (!strcmp(key, gPortBtnNames[i]) && v >= 0 && v < PORT_KEY_COUNT)
+                gPortConfig.keymap[i] = v;
+    }
 }
 
 void Port_ConfigLoad(void)
@@ -52,8 +62,8 @@ void Port_ConfigLoad(void)
 
 void Port_ConfigSave(void)
 {
-    char buf[256];
-    int n = snprintf(buf, sizeof(buf),
+    char buf[512];
+    int i, n = snprintf(buf, sizeof(buf),
                      "# Pokemon Vita port settings\n"
                      "wide_view = %d\n"
                      "display_style = %d\n"
@@ -63,6 +73,9 @@ void Port_ConfigSave(void)
                      "turbo = %d\n",
                      gPortConfig.viewMode, gPortConfig.displayStyle, gPortConfig.frameRate30, gPortConfig.gen3Wild,
                      gPortConfig.expMult, gPortConfig.turbo);
+    /* buttons: 0 none, 1 A, 2 B, 3 START, 4 SELECT, 5 L, 6 R */
+    for (i = 0; i < PORT_BTN_COUNT; i++)
+        n += snprintf(buf + n, sizeof(buf) - (size_t)n, "%s = %d\n", gPortBtnNames[i], gPortConfig.keymap[i]);
     Platform_WriteFile("settings.ini", buf, (unsigned long)n);
 }
 
