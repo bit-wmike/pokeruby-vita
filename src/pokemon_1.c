@@ -1,4 +1,5 @@
 #include "global.h"
+#include <string.h>
 #include "data2.h"
 #include "constants/abilities.h"
 #include "constants/items.h"
@@ -1595,7 +1596,13 @@ void sub_803ADE8(struct Pokemon *mon, struct UnknownPokemonStruct *src)
     SetMonData(mon, MON_DATA_PP_BONUSES, &src->ppBonuses);
     SetMonData(mon, MON_DATA_HELD_ITEM, &src->heldItem);
 
+#ifdef PORT
+    /* e-reader data may have no end mark: at most a name's length */
+    memcpy(nickname, src->nickname, POKEMON_NAME_LENGTH);
+    nickname[POKEMON_NAME_LENGTH] = EOS;
+#else
     StringCopy(nickname, src->nickname);
+#endif
 
     if (nickname[0] == 0xFC && nickname[1] == 0x15)
         language = LANGUAGE_JAPANESE;

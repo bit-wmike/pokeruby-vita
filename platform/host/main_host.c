@@ -133,6 +133,10 @@ uint16_t Platform_PollKeys(void)
     for (i = 0; i < sInputCount; i++)
         if (frame >= sInput[i].frame && frame < sInput[i].frame + sInput[i].len)
             keys |= (uint16_t)sInput[i].keys;
+    {
+        extern uint16_t gPortTestKeys;   /* port/port_test.c: test plans */
+        keys |= gPortTestKeys;
+    }
     {   /* PKR_AUTO_A=frame: from that frame on A every 30 frames */
         static int autoA = -2;
         if (autoA == -2)
@@ -338,7 +342,11 @@ int Platform_WriteFile(const char *name, const void *data, unsigned long size)
 
 int Platform_PaceAllowsRender(void)
 {
-    return 1;
+    /* PKR_NORENDER: test runs without pictures (only the screenshots) */
+    static int noRender = -1;
+    if (noRender < 0)
+        noRender = getenv("PKR_NORENDER") != NULL;
+    return !noRender || ShotWanted((int)Port_FrameCounter() + 1);
 }
 
 #ifdef __arm__

@@ -110,6 +110,30 @@ bool32 CanResetRTC(void)
         return FALSE;
 }
 
+#ifdef PORT
+/* VarGet/VarSet tell "no variable" (a constant) by NULL; everything else
+ * dereferences the pointer - on the GBA NULL is the BIOS (reads a value,
+ * writes vanish), here a scratch variable (scripts like Sky Pillar's) */
+static u16 *GetVarPointerOrNull(u16 id)
+{
+    if (id < VARS_START)
+        return NULL;
+    if (id < SPECIAL_VARS_START)
+        return &gSaveBlock1.vars[id - VARS_START];
+    return gSpecialVars[id - SPECIAL_VARS_START];
+}
+
+u16 *GetVarPointer(u16 id)
+{
+    static u16 sScratch;
+    u16 *p = GetVarPointerOrNull(id);
+    if (p)
+        return p;
+    sScratch = 0;
+    return &sScratch;
+}
+#define GetVarPointer GetVarPointerOrNull
+#else
 u16 *GetVarPointer(u16 id)
 {
     if (id < VARS_START)
@@ -118,6 +142,7 @@ u16 *GetVarPointer(u16 id)
         return &gSaveBlock1.vars[id - VARS_START];
     return gSpecialVars[id - SPECIAL_VARS_START];
 }
+#endif
 
 u16 VarGet(u16 id)
 {

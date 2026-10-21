@@ -75,6 +75,8 @@ void CpuSet(const void *src, void *dest, u32 control)
     dest = GbaPtr(dest);
     u32 count = control & 0x1FFFFF;
     int fill = (control >> 24) & 1;
+    if (count == 0)   /* nothing (the source may be NULL: a map without people) */
+        return;
     if (control & (1 << 26)) {
         u32 *d = (u32 *)dest;
         const u32 *s = (const u32 *)src;
@@ -99,6 +101,8 @@ void CpuFastSet(const void *src, void *dest, u32 control)
     u32 *d = (u32 *)dest;
     const u32 *s = (const u32 *)src;
     count = (count + 7) & ~7u;
+    if (count == 0)
+        return;
     if (control & (1 << 24)) {
         u32 v = *s;
         while (count--)
