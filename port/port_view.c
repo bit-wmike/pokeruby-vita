@@ -404,6 +404,7 @@ void PortView_PlaceWindows(void)
 
 #ifndef __vita__
     if (getenv("PKR_DUMP_BG0") && Port_FrameCounter() == (u32)atoi(getenv("PKR_DUMP_BG0"))) {
+        fprintf(stderr, "io dispcnt=%04x bg0cnt=%04x hofs=%d vofs=%d win0h=%04x win0v=%04x winin=%04x winout=%04x bldcnt=%04x win1h=%04x win1v=%04x\n", IoRead(0), IoRead(8), IoRead(0x10), IoRead(0x12), IoRead(0x40), IoRead(0x44), IoRead(0x48), IoRead(0x4A), IoRead(0x50), IoRead(0x42), IoRead(0x46));
         for (r = 0; r < 20; r++) {
             for (c = 0; c < 30; c++)
                 fprintf(stderr, "%04x ", MapEntry(map, wide64, tall64, (hofs >> 3) + c, (vofs >> 3) + r));
