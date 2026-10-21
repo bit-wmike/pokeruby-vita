@@ -251,7 +251,7 @@ static void OpenWav(void)
         0x80, 0xBB, 0, 0, 0x00, 0xEE, 0x02, 0, 4, 0, 16, 0, 'd', 'a', 't', 'a', 0, 0, 0, 0,
     };
     snprintf(path, sizeof(path), "%s/audio.wav", sOutDir);
-    sWav = fopen(path, "wb");
+    sWav = getenv("PKR_NOAUDIO") ? NULL : fopen(path, "wb");   /* long test runs: no 2 GB wav */
     if (sWav)
         fwrite(hdr, 1, sizeof(hdr), sWav);
 }

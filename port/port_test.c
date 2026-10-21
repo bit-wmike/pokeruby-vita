@@ -270,7 +270,7 @@ static void TestPlan(void)
  * the dex page; press A regularly (PKR_AUTO_A) */
 static void TestSpecies(void)
 {
-    static int init, cur = -1, last, wait;
+    static int init, cur = -1, last, wait, started;
     if (!init) {
         const char *e = getenv("PKR_TEST_SPECIES");
         init = 1;
@@ -281,15 +281,25 @@ static void TestSpecies(void)
         return;
     if (!PortIsOverworld()) {
         wait = 0;
+        started = 0;   /* the battle is on */
         return;
     }
+    if (started && ++started < 600)   /* the transition is still to begin */
+        return;
+    if (started)
+        fprintf(stderr, "[test] species %d: no battle\n", cur - 1);
     if (++wait < 30)
         return;
     wait = 0;
+    started = 1;
     if (cur == 252) cur = 277;   /* unused numbers between Celebi and Treecko */
     if (cur > last)
         return;
-    CreateMon(&gPlayerParty[0], (u16)cur, 60, 32, 0, 0, 0, 0);
+    {
+        u16 mv = cur == SPECIES_SHEDINJA ? MOVE_SHADOW_BALL : MOVE_DRAGON_CLAW;   /* first move must end the battle (Wonder Guard) */
+        CreateMon(&gPlayerParty[0], (u16)cur, 60, 32, 0, 0, 0, 0);
+        SetMonData(&gPlayerParty[0], MON_DATA_MOVE1, &mv);
+    }
     CalculatePlayerPartyCount();
     CreateScriptedWildMon((u16)cur, 5, 0);
     BattleSetup_StartWildBattle();
