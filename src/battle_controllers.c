@@ -1008,7 +1008,12 @@ void BtlController_EmitChosenMonReturnValue(u8 a, u8 b, u8 *c)
     gBattleBuffersTransferData[0] = 34;
     gBattleBuffersTransferData[1] = b;
     for (i = 0; i < 3; i++)
+#ifdef PORT
+        /* the opponent passes NULL (reads the BIOS on the GBA) */
+        gBattleBuffersTransferData[2 + i] = c ? c[i] : 0;
+#else
         gBattleBuffersTransferData[2 + i] = c[i];
+#endif
     PrepareBufferDataTransfer(a, gBattleBuffersTransferData, 5);
 }
 

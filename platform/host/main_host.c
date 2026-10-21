@@ -10,6 +10,7 @@
  *   PKR_SHOT=a,b,c      frames to save as dir/frame_<n>.ppm
  *   PKR_SHOT_EVERY=k    additionally save every k-th frame
  *   PKR_INPUT=script    "frame:keys:len,..." keys as GBA bits (hex), held len frames
+ *   PKR_AUTO_A=frame    press A every 30 frames from that frame on
  *   PKR_SAVE=file       flash save (default dir/pokemon.sav)
  */
 #define _GNU_SOURCE
@@ -103,6 +104,13 @@ uint16_t Platform_PollKeys(void)
     for (i = 0; i < sInputCount; i++)
         if (frame >= sInput[i].frame && frame < sInput[i].frame + sInput[i].len)
             keys |= (uint16_t)sInput[i].keys;
+    {   /* PKR_AUTO_A=frame: from that frame on A every 30 frames */
+        static int autoA = -2;
+        if (autoA == -2)
+            autoA = getenv("PKR_AUTO_A") ? atoi(getenv("PKR_AUTO_A")) : -1;
+        if (autoA >= 0 && frame >= autoA && (frame - autoA) % 30 < 3)
+            keys |= 1;
+    }
     return keys;
 }
 

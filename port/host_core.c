@@ -1,3 +1,4 @@
+#include <time.h>
 /*
  * Frame loop of the host / PS Vita port: stands in for the GBA's display
  * timing and interrupts.
@@ -109,6 +110,8 @@ static void PreLine(int line)
         RaiseIrq(INTR_FLAG_VCOUNT);
 }
 
+#define FIELD_W 480   /* pitch (the renderer wants at least 480) */
+
 static void RenderFrame(void)
 {
     static int bound;
@@ -150,8 +153,49 @@ static void RenderFrame(void)
         };
         virtuappu_mode1_bind_gba_memory(&mem);
         virtuappu_mode1_set_old3ds_profile(true);
-        virtuappu_mode1_set_output_buffer(sFrameBuffer, FRAME_MAX_W);
         bound = 1;
+    }
+
+    if (stage) {
+        /* battle: the field (GBA picture, 320 wide) and the windows in
+         * two passes, put together 1.5x over the stage */
+        static uint32_t field[FIELD_W * 160], ui[FIELD_W * 160];
+        int fw, fh;
+#ifndef __vita__
+        static double acc[3]; static int nacc; struct timespec ts0, ts1;
+#define STAGE_T(k) do { clock_gettime(CLOCK_MONOTONIC, &ts1); acc[k] += (ts1.tv_sec - ts0.tv_sec) * 1e6 + (ts1.tv_nsec - ts0.tv_nsec) / 1e3; ts0 = ts1; if (k == 2 && ++nacc == 200) { if (getenv("PKR_STAGE_TIME")) fprintf(stderr, "[stage] field %.0f ui %.0f compose %.0f us\n", acc[0] / 200, acc[1] / 200, acc[2] / 200); acc[0] = acc[1] = acc[2] = 0; nacc = 0; } } while (0)
+        clock_gettime(CLOCK_MONOTONIC, &ts0);
+#else
+#define STAGE_T(k) do {} while (0)
+#endif
+        PortStage_FieldPass(&fw, &fh);
+        memset(&ppu, 0, sizeof(ppu));
+        ppu.frame_width = (uint16_t)fw;
+        ppu.frame_height = (uint16_t)fh;
+        ppu.frame_pitch = FIELD_W;
+        ppu.mode = ((dispcnt & 7) == 0) ? 1 : 2;
+        virtuappu_mode1_set_output_buffer(field, FIELD_W);
+        virtuappu_mode1_pre_line_callback = PreLine;
+        sRendering = 1;
+        Port_ProfileBegin(PORT_PROF_RENDER);
+        virtuappu_mode1_render_frame(&ppu);
+        sRendering = 0;
+        STAGE_T(0);
+        PortStage_UiPass();
+        memset(&ppu, 0, sizeof(ppu));
+        ppu.frame_width = PORT_GBA_W;
+        ppu.frame_height = PORT_GBA_H;
+        ppu.frame_pitch = FIELD_W;
+        ppu.mode = ((dispcnt & 7) == 0) ? 1 : 2;
+        virtuappu_mode1_set_output_buffer(ui, FIELD_W);
+        virtuappu_mode1_pre_line_callback = NULL;
+        virtuappu_mode1_render_frame(&ppu);
+        STAGE_T(1);
+        PortStage_Compose(sFrameBuffer, FRAME_MAX_W, field, FIELD_W, ui, FIELD_W);
+        STAGE_T(2);
+        Port_ProfileEnd(PORT_PROF_RENDER);
+        Platform_Present(sFrameBuffer, width, height, FRAME_MAX_W, zoom);
+        return;
     }
 
     memset(&ppu, 0, sizeof(ppu));
@@ -160,6 +204,7 @@ static void RenderFrame(void)
     ppu.frame_pitch = FRAME_MAX_W;
     ppu.mode = ((dispcnt & 7) == 0) ? 1 : 2;
 
+    virtuappu_mode1_set_output_buffer(sFrameBuffer, FRAME_MAX_W);
     virtuappu_mode1_pre_line_callback = PreLine;
     sRendering = 1;
     Port_ProfileBegin(PORT_PROF_RENDER);
@@ -167,8 +212,6 @@ static void RenderFrame(void)
     Port_ProfileEnd(PORT_PROF_RENDER);
     sRendering = 0;
 
-    if (stage)
-        PortStage_EndFrame(sFrameBuffer, FRAME_MAX_W);
     Platform_Present(sFrameBuffer, width, height, FRAME_MAX_W, zoom);
 }
 

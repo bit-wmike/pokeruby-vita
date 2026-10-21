@@ -16,20 +16,28 @@ extern unsigned char __start_game_bss[], __stop_game_bss[];
 extern unsigned char __start_iwram_data[] __attribute__((weak)), __stop_iwram_data[] __attribute__((weak));
 extern unsigned char __start_ewram_data[] __attribute__((weak)), __stop_ewram_data[] __attribute__((weak));
 
+/* clears a whole section of globals (also the gaps a sanitizer puts
+ * between them) */
+static __attribute__((no_sanitize_address)) void ZeroSection(unsigned char *p, unsigned char *e)
+{
+    while (p < e)
+        *(volatile unsigned char *)p++ = 0;
+}
+
 /* SWI 0x01 */
 void RegisterRamReset(u32 flags)
 {
     if (flags & RESET_EWRAM) {
         memset(gHostEwram, 0, sizeof(gHostEwram));
         if (__start_ewram_data)
-            memset(__start_ewram_data, 0, __stop_ewram_data - __start_ewram_data);
+            ZeroSection(__start_ewram_data, __stop_ewram_data);
     }
     if (flags & RESET_IWRAM) {
         /* the last 0x200 bytes (stacks, interrupt vector) are kept */
         memset(gHostIwram, 0, 0x7E00);
         if (__start_iwram_data)
-            memset(__start_iwram_data, 0, __stop_iwram_data - __start_iwram_data);
-        memset(__start_game_bss, 0, __stop_game_bss - __start_game_bss);
+            ZeroSection(__start_iwram_data, __stop_iwram_data);
+        ZeroSection(__start_game_bss, __stop_game_bss);
     }
     if (flags & RESET_PALETTE)
         memset(gHostPalram, 0, sizeof(gHostPalram));

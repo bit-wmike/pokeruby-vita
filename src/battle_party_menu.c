@@ -102,7 +102,7 @@ static void sub_8094998(u8 arg[3], u8 player_number)
 {
     int i;
     u32 pos;
-    u8 temp[6];
+    u8 temp[8];   /* port: 6 + room for a double battle with one Pokemon */
     if (IsLinkDoubleBattle() == TRUE)
     {
         if (player_number)
@@ -145,7 +145,7 @@ static void sub_8094998(u8 arg[3], u8 player_number)
 static void sub_8094A74(u8 arg[3], u8 player_number, u32 arg3)
 {
     int i, j;
-    u8 temp[6];
+    u8 temp[8];   /* port: 6 + room for a double battle with one Pokemon */
     if (!GetBattlerSide(arg3))
     {
         i = GetBattlerAtPosition(0);
@@ -199,7 +199,7 @@ void sub_8094B6C(u8 a, u8 b, u8 c)
 {
     s32 i;
     s32 j;
-    u8 temp[6];
+    u8 temp[8];   /* port: 6 + room for a double battle with one Pokemon */
     u8 r3;
     u8 r7 = 0;
 

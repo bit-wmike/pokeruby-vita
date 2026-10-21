@@ -162,6 +162,8 @@ static void WaitDue(void)
         sceDisplayWaitVblankStart();
 }
 
+int PortIsTitleScreen(void);
+
 static void DrawGame(void)
 {
     int width = sLastW, height = sLastH;
@@ -198,6 +200,10 @@ static void DrawGame(void)
         vita2d_texture_set_filters(sTex, f, f);
         vita2d_draw_texture_part_scale(sTex, dx, dy, 0, 0, (float)width, (float)height, scale, scale);
     }
+    /* the port version, small, on the title screen */
+    if (PortIsTitleScreen())
+        vita2d_pgf_draw_text(sFont, 960 - 8 - vita2d_pgf_text_width(sFont, 0.8f, "v" PKR_PORT_VERSION), 536,
+                             RGBA8(255, 255, 255, 170), 0.8f, "v" PKR_PORT_VERSION);
 }
 
 void Platform_Present(const uint32_t *pixels, int width, int height, int pitch, int zoomHeight)

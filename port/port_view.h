@@ -25,6 +25,8 @@ int PortView_SpriteInWindow(int oamIndex);
 
 /* Battle stage (port/port_stage.c): 1 when this frame is a wide battle */
 int PortStage_BeginFrame(void);
-void PortStage_EndFrame(uint32_t *fb, int pitch);
+void PortStage_FieldPass(int *w, int *h);
+void PortStage_UiPass(void);
+void PortStage_Compose(uint32_t *fb, int pitch, const uint32_t *field, int fpitch, const uint32_t *ui, int upitch);
 
 #endif

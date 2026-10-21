@@ -101,6 +101,14 @@ const union AnimCmd gSpriteAnim_83D9F5C[] =
 const union AnimCmd *const gSpriteAnimTable_83D9F64[] =
 {
     gSpriteAnim_83D9F3C,
+#ifdef PORT
+    /* Karate Chop starts anim 3: on the GBA that reads on into the next
+     * tables (gSpriteAnimTable_83D9F68/F70) */
+    gSpriteAnim_83D9F44,
+    gSpriteAnim_83D9F4C,
+    gSpriteAnim_83D9F54,
+    gSpriteAnim_83D9F5C,
+#endif
 };
 
 const union AnimCmd *const gSpriteAnimTable_83D9F68[] =

@@ -1494,7 +1494,11 @@ void sub_8045180(struct Sprite *sprite)
 
 /*static*/ void sub_80451A0(u8 a, struct Pokemon *pkmn)
 {
+#ifdef PORT
+    u8 nickname[POKEMON_NAME_LENGTH + 1];   /* GetMonData writes the EOS too */
+#else
     u8 nickname[POKEMON_NAME_LENGTH];
+#endif
     u8 gender;
     u16 species;
     u8 language;

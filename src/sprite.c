@@ -292,7 +292,14 @@ static u16 sSpritePaletteTags[16];
 u32 gOamMatrixAllocBitmap;
 u8 gReservedSpritePaletteCount;
 
+#ifdef PORT
+/* room up to sprite id 0xFF: the game uses "no sprite" (0xFF, e.g. a
+ * battler that is not there) as an index now and then; on the GBA that
+ * reads and writes other RAM, here it stays in this array */
+EWRAM_DATA struct Sprite gSprites[256] = {0};
+#else
 EWRAM_DATA struct Sprite gSprites[MAX_SPRITES + 1] = {0};
+#endif
 EWRAM_DATA u16 sSpritePriorities[MAX_SPRITES] = {0};
 u8 sSpriteOrder[MAX_SPRITES];
 bool8 sShouldProcessSpriteCopyRequests;

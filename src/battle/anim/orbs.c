@@ -80,6 +80,9 @@ const union AnimCmd *const gSpriteAnimTable_83D62B4[] =
     gSpriteAnim_83D628C,
     gSpriteAnim_83D6294,
     gSpriteAnim_83D629C,
+#ifdef PORT
+    gSpriteAnim_83D62A4,   /* Random() & 7: on the GBA the next table */
+#endif
 };
 
 const union AnimCmd *const gSpriteAnimTable_83D62D0[] =

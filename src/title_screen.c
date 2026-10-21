@@ -625,6 +625,14 @@ void CB2_InitTitleScreen(void)
     }
 }
 
+#ifdef PORT
+/* the port shows its version on the title screen */
+int PortIsTitleScreen(void)
+{
+    return gMain.callback2 == MainCB2;
+}
+#endif
+
 static void MainCB2(void)
 {
     RunTasks();

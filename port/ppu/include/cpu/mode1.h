@@ -44,7 +44,7 @@ extern int16_t virtuappu_mode1_obj_base_y[128];
 /* Source GBA scanline = output line - line_dy (wide view shifted down). */
 extern int virtuappu_mode1_line_dy;
 extern uint32_t virtuappu_mode1_backdrop_key;
-#define VIRTUAPPU_MODE1_MAX_REGIONS 48
+#define VIRTUAPPU_MODE1_MAX_REGIONS 160
 typedef struct virtuappu_mode1_region {
     int x0, x1, y0, y1; /* destination rect in the frame */
     int dx, dy;         /* the BG is sampled at (x - dx, y - dy) */

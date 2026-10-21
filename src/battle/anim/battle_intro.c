@@ -40,9 +40,16 @@ static const TaskFunc sBattleIntroTaskFuncs[] =
 #define tBgXOffset data[2]
 #define tFramesUntilBg1Slide data[3]
 
+#ifdef PORT
+int gPortBattleIntro;   /* port: the intro scenery is shown (wide battle) */
+#endif
+
 void HandleIntroSlide(u8 a)
 {
     u8 taskId;
+#ifdef PORT
+    gPortBattleIntro = 1;
+#endif
 
     if (gBattleTypeFlags & BATTLE_TYPE_LINK)
     {
@@ -69,6 +76,9 @@ void HandleIntroSlide(u8 a)
 
 static void EndBattleIntroTask(u8 taskId)
 {
+#ifdef PORT
+    gPortBattleIntro = 0;
+#endif
     DestroyTask(taskId);
     gBattle_BG1_X = 0;
     gBattle_BG1_Y = 0;

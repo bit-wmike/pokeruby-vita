@@ -4038,6 +4038,13 @@ static void atk44_endselectionscript(void)
     gSharedMem[BSTRUCT_OFF(selectionScriptFinished) + gBattlerAttacker] = 1;
 }
 
+#ifdef PORT
+/* battle scripts pass NULL for "no argument" (reads the BIOS on the GBA) */
+#define ARG_PTR_VALUE(p) ((p) ? *(p) : 0)
+#else
+#define ARG_PTR_VALUE(p) (*(p))
+#endif
+
 static void atk45_playanimation(void)
 {
     const u16* argumentPtr;
@@ -4049,7 +4056,7 @@ static void atk45_playanimation(void)
         || gBattlescriptCurrInstr[2] == B_ANIM_SNATCH_MOVE
         || gBattlescriptCurrInstr[2] == B_ANIM_SUBSTITUTE_FADE)
     {
-        BtlController_EmitBattleAnimation(0, gBattlescriptCurrInstr[2], *argumentPtr);
+        BtlController_EmitBattleAnimation(0, gBattlescriptCurrInstr[2], ARG_PTR_VALUE(argumentPtr));
         MarkBattlerForControllerExec(gActiveBattler);
         gBattlescriptCurrInstr += 7;
     }
@@ -4063,7 +4070,7 @@ static void atk45_playanimation(void)
              || gBattlescriptCurrInstr[2] == B_ANIM_SANDSTORM_CONTINUES
              || gBattlescriptCurrInstr[2] == B_ANIM_HAIL_CONTINUES)
     {
-        BtlController_EmitBattleAnimation(0, gBattlescriptCurrInstr[2], *argumentPtr);
+        BtlController_EmitBattleAnimation(0, gBattlescriptCurrInstr[2], ARG_PTR_VALUE(argumentPtr));
         MarkBattlerForControllerExec(gActiveBattler);
         gBattlescriptCurrInstr += 7;
     }
@@ -4073,7 +4080,7 @@ static void atk45_playanimation(void)
     }
     else
     {
-        BtlController_EmitBattleAnimation(0, gBattlescriptCurrInstr[2], *argumentPtr);
+        BtlController_EmitBattleAnimation(0, gBattlescriptCurrInstr[2], ARG_PTR_VALUE(argumentPtr));
         MarkBattlerForControllerExec(gActiveBattler);
         gBattlescriptCurrInstr += 7;
     }
@@ -4092,7 +4099,7 @@ static void atk46_playanimation2(void) // animation Id is stored in the first po
         || *animationIdPtr == B_ANIM_SNATCH_MOVE
         || *animationIdPtr == B_ANIM_SUBSTITUTE_FADE)
     {
-        BtlController_EmitBattleAnimation(0, *animationIdPtr, *argumentPtr);
+        BtlController_EmitBattleAnimation(0, *animationIdPtr, ARG_PTR_VALUE(argumentPtr));
         MarkBattlerForControllerExec(gActiveBattler);
         gBattlescriptCurrInstr += 10;
     }
@@ -4105,7 +4112,7 @@ static void atk46_playanimation2(void) // animation Id is stored in the first po
              || *animationIdPtr == B_ANIM_SANDSTORM_CONTINUES
              || *animationIdPtr == B_ANIM_HAIL_CONTINUES)
     {
-        BtlController_EmitBattleAnimation(0, *animationIdPtr, *argumentPtr);
+        BtlController_EmitBattleAnimation(0, *animationIdPtr, ARG_PTR_VALUE(argumentPtr));
         MarkBattlerForControllerExec(gActiveBattler);
         gBattlescriptCurrInstr += 10;
     }
@@ -4115,7 +4122,7 @@ static void atk46_playanimation2(void) // animation Id is stored in the first po
     }
     else
     {
-        BtlController_EmitBattleAnimation(0, *animationIdPtr, *argumentPtr);
+        BtlController_EmitBattleAnimation(0, *animationIdPtr, ARG_PTR_VALUE(argumentPtr));
         MarkBattlerForControllerExec(gActiveBattler);
         gBattlescriptCurrInstr += 10;
     }

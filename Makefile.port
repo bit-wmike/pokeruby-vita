@@ -76,9 +76,11 @@ PPU_DEFS += -DTMC_VITA
 endif
 
 # The game is compiled as on the GBA: char is unsigned, overflow wraps,
-# no type-based alias analysis.
+# no type-based alias analysis, globals in source order (tables read past
+# their end then hit the next table like in the ROM).
 GAME_CFLAGS := $(ARCHFLAGS) $(OPT) -std=gnu11 -funsigned-char -fwrapv -fno-strict-aliasing \
-               -fno-delete-null-pointer-checks -fno-common -w
+               -fno-delete-null-pointer-checks -fno-common -w \
+               -fno-toplevel-reorder
 PORT_CFLAGS := $(ARCHFLAGS) $(OPT) -ffp-contract=off -std=gnu11 -funsigned-char -fwrapv -fno-strict-aliasing -Wall -Wno-unused-function
 INCLUDES := -iquote include -I . -Iport/ppu/include
 
@@ -176,14 +178,20 @@ ART = $(if $(wildcard platform/vita/sce_sys_local_$(GAME)/$(1)),platform/vita/sc
 
 vpk: $(VPK)
 
-$(VPK): $(OUT) $(call ART,icon0.png) $(call ART,livearea/contents/bg.png) $(call ART,livearea/contents/startup.png) platform/vita/template.xml platform/vita/VERSION
+# the LiveArea images carry the version (small, bottom right)
+$(BUILD)/la_bg.png: $(call ART,livearea/contents/bg.png) platform/vita/VERSION tools/port/stamp_version.py
+	$(PYTHON) tools/port/stamp_version.py $< $@ "v$(VERSION)"
+$(BUILD)/la_startup.png: $(call ART,livearea/contents/startup.png) platform/vita/VERSION tools/port/stamp_version.py
+	$(PYTHON) tools/port/stamp_version.py $< $@ "v$(VERSION)"
+
+$(VPK): $(OUT) $(call ART,icon0.png) $(BUILD)/la_bg.png $(BUILD)/la_startup.png platform/vita/template.xml platform/vita/VERSION
 	$(VITASDK)/bin/vita-elf-create $(OUT) $(BUILD)/pokemon.velf
 	$(VITASDK)/bin/vita-make-fself -s -c $(BUILD)/pokemon.velf $(BUILD)/eboot.bin
 	$(VITASDK)/bin/vita-mksfoex -s TITLE_ID=$(TITLE_ID) -s APP_VER=01.00 -d ATTRIBUTE2=12 "$(TITLE)" $(BUILD)/param.sfo
 	$(VITASDK)/bin/vita-pack-vpk -s $(BUILD)/param.sfo -b $(BUILD)/eboot.bin \
 	    -a $(call ART,icon0.png)=sce_sys/icon0.png \
-	    -a $(call ART,livearea/contents/bg.png)=sce_sys/livearea/contents/bg.png \
-	    -a $(call ART,livearea/contents/startup.png)=sce_sys/livearea/contents/startup.png \
+	    -a $(BUILD)/la_bg.png=sce_sys/livearea/contents/bg.png \
+	    -a $(BUILD)/la_startup.png=sce_sys/livearea/contents/startup.png \
 	    -a platform/vita/template.xml=sce_sys/livearea/contents/template.xml \
 	    $@
 	cp $(OUT) $(BUILD)/pokemon_$(GAME)_vita-$(VERSION).elf
