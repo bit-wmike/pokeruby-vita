@@ -5,14 +5,17 @@
 
 #include "port/port_config.h"
 
-struct PortConfig gPortConfig = {PORT_VIEW_FULL, PORT_STYLE_PIXEL, 0, 1, 0};
+struct PortConfig gPortConfig = {PORT_VIEW_FULL, PORT_STYLE_PIXEL, 0, 1, 0, 3};
+struct PortCheats gPortCheats = {1, 0, 0, 0, 0};
 
 static void Set(const char *key, int v)
 {
     if (!strcmp(key, "wide_view") && v >= 0 && v <= 1)
         gPortConfig.viewMode = v;
-    else if (!strcmp(key, "display_style") && v >= 0 && v <= 2)
-        gPortConfig.displayStyle = v;
+    else if (!strcmp(key, "display_style") && v >= 0 && v <= 3)
+        gPortConfig.displayStyle = v == PORT_STYLE_HQ ? PORT_STYLE_HQ : PORT_STYLE_PIXEL;
+    else if (!strcmp(key, "turbo") && v >= 2 && v <= 4)
+        gPortConfig.turbo = v;
     else if (!strcmp(key, "frame_rate_30"))
         gPortConfig.frameRate30 = v != 0;
     else if (!strcmp(key, "exp_multiplier") && (v == 1 || v == 2 || v == 4 || v == 8))
@@ -36,6 +39,9 @@ void Port_ConfigLoad(void)
             Set(key, v);
     }
     }
+    if (getenv("PKR_CHEATS")) /* host build: encounters,shiny,random,flee,run */
+        sscanf(getenv("PKR_CHEATS"), "%d,%d,%d,%d,%d", &gPortCheats.encounters, &gPortCheats.shiny,
+               &gPortCheats.randomSpecies, &gPortCheats.alwaysFlee, &gPortCheats.runIndoors);
     if (getenv("PKR_EXP")) /* host build */
         gPortConfig.expMult = atoi(getenv("PKR_EXP"));
     if (getenv("PKR_HOENN")) /* host build */
@@ -53,9 +59,10 @@ void Port_ConfigSave(void)
                      "display_style = %d\n"
                      "frame_rate_30 = %d\n"
                      "only_hoenn = %d\n"
-                     "exp_multiplier = %d\n",
+                     "exp_multiplier = %d\n"
+                     "turbo = %d\n",
                      gPortConfig.viewMode, gPortConfig.displayStyle, gPortConfig.frameRate30, gPortConfig.gen3Wild,
-                     gPortConfig.expMult);
+                     gPortConfig.expMult, gPortConfig.turbo);
     Platform_WriteFile("settings.ini", buf, (unsigned long)n);
 }
 
@@ -67,4 +74,38 @@ int PortGen3Wild(void)
 int PortExpMultiplier(void)
 {
     return gPortConfig.expMult >= 1 ? gPortConfig.expMult : 1;
+}
+
+/* ---- cheats, asked by the game (src/wild_encounter.c, battle_main.c,
+ * bike.c) ---- */
+int PortCheatEncounters(void)
+{
+    return gPortCheats.encounters;
+}
+
+int PortCheatShiny(void)
+{
+    return gPortCheats.shiny;
+}
+
+int PortCheatFlee(void)
+{
+    return gPortCheats.alwaysFlee;
+}
+
+int PortCheatRunIndoors(void)
+{
+    return gPortCheats.runIndoors;
+}
+
+/* any Pokemon (internal numbers: 1-251 Kanto/Johto, 277-411 Hoenn), with
+ * "Nur Hoenn" only Hoenn ones */
+unsigned short PortCheatSpecies(unsigned short species, unsigned rnd)
+{
+    if (!gPortCheats.randomSpecies)
+        return species;
+    if (gPortConfig.gen3Wild)
+        return (unsigned short)(277 + rnd % 135);
+    rnd %= 251 + 135;
+    return (unsigned short)(rnd < 251 ? 1 + rnd : 277 + (rnd - 251));
 }

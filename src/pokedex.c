@@ -3771,9 +3771,16 @@ _08090708: .4byte 0x06000072\n\
 }
 #endif
 
+#ifdef PORT
+int gPortDexPage;   /* port: the dex page of a caught Pokemon is shown */
+#endif
+
 u8 sub_809070C(u16 dexNum, u32 b, u32 c)
 {
     u8 taskId = CreateTask(sub_8090750, 0);
+#ifdef PORT
+    gPortDexPage = 1;
+#endif
 
     gTasks[taskId].data[0] = 0;
     gTasks[taskId].data[1] = dexNum;
@@ -3923,6 +3930,9 @@ static void sub_8090B8C(u8 taskId)
         paletteNum = gSprites[gTasks[taskId].data[3]].oam.paletteNum;
         lzPaletteData = GetMonSpritePalFromOtIdPersonality(species, otId, personality);
         LoadCompressedPalette(lzPaletteData, 0x100 | paletteNum * 16, 32);
+        #ifdef PORT
+        gPortDexPage = 0;
+#endif
         DestroyTask(taskId);
     }
 }

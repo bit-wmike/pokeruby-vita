@@ -23,6 +23,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include "vita_hq.h"
 #include <string.h>
 #include <vita2d.h>
 
@@ -72,10 +73,32 @@ void Platform_Log(const char *fmt, ...)
 /* -------------------------------------------------------------- video */
 
 static vita2d_texture *sTex;
-static vita2d_texture *sSharp;
+/* battle layers (Platform_PresentBattle) */
+static vita2d_texture *sStageTex, *sFieldTex, *sUiTex, *sHudTex;
+static PortBattleFrame sBattle;
+static int sBattleOn;
+static unsigned sStageSerial = ~0u;
+static vita2d_texture *sBackTex;   /* behind GBA sized screens */
+static int sBackOn;
+
+void Platform_SetBackdrop(const uint32_t *pixels)
+{
+    if (!pixels) {
+        sBackOn = 0;
+        return;
+    }
+    vita2d_wait_rendering_done();
+    {
+        uint8_t *dst = (uint8_t *)vita2d_texture_get_datap(sBackTex);
+        unsigned stride = vita2d_texture_get_stride(sBackTex);
+        int y;
+        for (y = 0; y < 272; y++)
+            memcpy(dst + y * stride, pixels + y * 480, 480 * 4);
+    }
+    sBackOn = 1;
+}
 static vita2d_pgf *sFont;
 
-#define SHARP_K 3
 
 static void VideoInit(void)
 {
@@ -83,7 +106,16 @@ static void VideoInit(void)
     vita2d_set_clear_color(RGBA8(0, 0, 0, 255));
     vita2d_set_vblank_wait(0); /* paced by WaitDue() */
     sTex = vita2d_create_empty_texture_format(TEX_W, TEX_H, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
-    sSharp = vita2d_create_empty_texture_rendertarget(TEX_W * SHARP_K, TEX_H * SHARP_K, SCE_GXM_TEXTURE_FORMAT_A8B8G8R8);
+    sStageTex = vita2d_create_empty_texture_format(480, 272, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
+    sFieldTex = vita2d_create_empty_texture_format(320, 160, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
+    sUiTex = vita2d_create_empty_texture_format(240, 160, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
+    sHudTex = vita2d_create_empty_texture_format(240, 160, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
+    sBackTex = vita2d_create_empty_texture_format(480, 272, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
+    vita2d_texture_set_filters(sBackTex, SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR);
+    vita2d_texture_set_filters(sStageTex, SCE_GXM_TEXTURE_FILTER_POINT, SCE_GXM_TEXTURE_FILTER_POINT);
+    vita2d_texture_set_filters(sFieldTex, SCE_GXM_TEXTURE_FILTER_POINT, SCE_GXM_TEXTURE_FILTER_POINT);
+    vita2d_texture_set_filters(sUiTex, SCE_GXM_TEXTURE_FILTER_POINT, SCE_GXM_TEXTURE_FILTER_POINT);
+    vita2d_texture_set_filters(sHudTex, SCE_GXM_TEXTURE_FILTER_POINT, SCE_GXM_TEXTURE_FILTER_POINT);
     sFont = vita2d_load_default_pgf();
 }
 
@@ -137,9 +169,16 @@ static void Reanchor(void)
     sAnchored = 1;
 }
 
+static int sTurbo;   /* right stick up: the game runs gPortConfig.turbo times as fast */
+
 int Platform_PaceAllowsRender(void)
 {
     int late;
+    if (sTurbo) {
+        /* no waiting, only every n-th frame drawn */
+        sAnchored = 0;
+        return Port_FrameCounter() % (unsigned)(gPortConfig.turbo > 1 ? gPortConfig.turbo : 2) == 0;
+    }
     if (!sAnchored)
         Reanchor();
     late = FrameLate();
@@ -158,48 +197,86 @@ int Platform_PaceAllowsRender(void)
 
 static void WaitDue(void)
 {
+    if (sTurbo) {
+        Reanchor();
+        return;
+    }
     while (FrameLate() < 0)
         sceDisplayWaitVblankStart();
 }
 
 int PortIsTitleScreen(void);
 
+/* the battle layers at screen scale k (480x272 -> 960x544: k = 2, the field
+ * 1.5x -> 3x: sharp pixels without any filtering) */
+static void DrawBattle(float dx, float dy, float k)
+{
+    const PortBattleFrame *f = &sBattle;
+    int i;
+    vita2d_start_drawing();
+    vita2d_clear_screen();
+    vita2d_draw_texture_scale(sStageTex, dx, dy, k, k);
+    for (i = 0; i < f->nparts; i++) {
+        const PortParticle *p = &f->parts[i];
+        if (p->x0 == p->x1 || p->y0 == p->y1)
+            vita2d_draw_rectangle(dx + p->x0 * k, dy + p->y0 * k, (abs(p->x1 - p->x0) + 1) * k,
+                                  (abs(p->y1 - p->y0) + 1) * k, p->color);
+        else
+            vita2d_draw_line(dx + p->x0 * k, dy + p->y0 * k, dx + p->x1 * k, dy + p->y1 * k, p->color);
+    }
+    if (f->fade > 0)
+        vita2d_draw_rectangle(dx, dy, 480 * k, 272 * k, (f->fadeColor & 0x00FFFFFFu) | ((uint32_t)f->fade << 24));
+    vita2d_draw_texture_part_scale(sFieldTex, dx, dy + f->fieldY * k, 0, 0, (float)f->fieldW, (float)f->fieldH,
+                                   1.5f * k, 1.5f * k);
+    for (i = 0; i < f->nblits; i++) {
+        const PortBlit *b = &f->blits[i];
+        vita2d_draw_texture_part_scale(sUiTex, dx + b->dx * k, dy + b->dy * k, b->sx, b->sy, b->w, b->h, k, k);
+    }
+    for (i = 0; i < f->nhud; i++) {
+        const PortBlit *b = &f->hudBlits[i];
+        vita2d_draw_texture_part_scale(sHudTex, dx + b->dx * k, dy + b->dy * k, b->sx, b->sy, b->w, b->h, k, k);
+    }
+}
+
+static void Upload(vita2d_texture *t, const uint32_t *src, int w, int h, int pitch)
+{
+    uint8_t *dst = (uint8_t *)vita2d_texture_get_datap(t);
+    unsigned stride = vita2d_texture_get_stride(t);
+    int y;
+    for (y = 0; y < h; y++)
+        memcpy(dst + y * stride, src + y * pitch, (size_t)w * 4);
+}
+
 static void DrawGame(void)
 {
     int width = sLastW, height = sLastH;
-    float scale = 544.0f / sLastZoom;
-    float dx, dy;
+    int k = 544 / sLastZoom;
+    float scale, dx, dy;
 
-    if (gPortConfig.displayStyle == PORT_STYLE_PIXEL) {
-        int k = 544 / sLastZoom;
-        if (k * width > 960)
-            k = 960 / width;
-        scale = (float)(k < 1 ? 1 : k);
-    } else if (scale * width > 960.0f) {
-        scale = 960.0f / width;
-    }
+    /* whole-number scale: 2x wide view, 3x GBA sized screens */
+    if (k * width > 960)
+        k = 960 / width;
+    scale = (float)(k < 1 ? 1 : k);
     dx = (float)(int)((960.0f - width * scale) / 2.0f);
     dy = (float)(int)((544.0f - height * scale) / 2.0f);
-
-    if (gPortConfig.displayStyle == PORT_STYLE_SHARP) {
-        /* nearest-neighbour to 3x, then a smooth scale to the screen */
-        vita2d_start_drawing_advanced(sSharp, SCE_GXM_SCENE_FRAGMENT_SET_DEPENDENCY);
-        vita2d_texture_set_filters(sTex, SCE_GXM_TEXTURE_FILTER_POINT, SCE_GXM_TEXTURE_FILTER_POINT);
-        vita2d_draw_texture_part_scale(sTex, 0, 0, 0, 0, (float)width, (float)height, (float)SHARP_K, (float)SHARP_K);
-        vita2d_end_drawing();
-        vita2d_start_drawing_advanced(NULL, SCE_GXM_SCENE_VERTEX_WAIT_FOR_DEPENDENCY);
-        vita2d_clear_screen();
-        vita2d_texture_set_filters(sSharp, SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR);
-        vita2d_draw_texture_part_scale(sSharp, dx, dy, 0, 0, (float)(width * SHARP_K), (float)(height * SHARP_K),
-                                       scale / SHARP_K, scale / SHARP_K);
+    if (sBattleOn) {
+        DrawBattle(dx, dy, scale);   /* battle layers: pixel exact */
+        goto overlay;
+    }
+    vita2d_start_drawing();
+    vita2d_clear_screen();
+    if (sBackOn && width < 480) {
+        /* GBA sized screen (bag, party, shop ...) over the blurred scene */
+        vita2d_draw_texture_scale(sBackTex, 0, 0, 2.0f, 2.0f);
+        vita2d_draw_rectangle(dx - 4, dy - 4, width * scale + 8, height * scale + 8, RGBA8(0, 0, 0, 120));
+    }
+    if (gPortConfig.displayStyle == PORT_STYLE_HQ && VitaHq_Available()) {
+        VitaHq_Draw(sTex, dx, dy, 0, 0, (float)width, (float)height, scale);
     } else {
-        SceGxmTextureFilter f = gPortConfig.displayStyle == PORT_STYLE_SMOOTH ? SCE_GXM_TEXTURE_FILTER_LINEAR
-                                                                               : SCE_GXM_TEXTURE_FILTER_POINT;
-        vita2d_start_drawing();
-        vita2d_clear_screen();
-        vita2d_texture_set_filters(sTex, f, f);
+        vita2d_texture_set_filters(sTex, SCE_GXM_TEXTURE_FILTER_POINT, SCE_GXM_TEXTURE_FILTER_POINT);
         vita2d_draw_texture_part_scale(sTex, dx, dy, 0, 0, (float)width, (float)height, scale, scale);
     }
+overlay:
     /* the port version, small, on the title screen */
     if (PortIsTitleScreen())
         vita2d_pgf_draw_text(sFont, 960 - 8 - vita2d_pgf_text_width(sFont, 0.8f, "v" PKR_PORT_VERSION), 536,
@@ -218,9 +295,35 @@ void Platform_Present(const uint32_t *pixels, int width, int height, int pitch, 
     stride = vita2d_texture_get_stride(sTex);
     for (y = 0; y < height; y++)
         memcpy(dst + y * stride, pixels + y * pitch, (size_t)width * 4);
+    sBattleOn = 0;
     sLastW = width;
     sLastH = height;
     sLastZoom = zoomHeight;
+
+    vita2d_pool_reset();
+    DrawGame();
+    vita2d_end_drawing();
+    WaitDue();
+    vita2d_swap_buffers();
+    sLastPresentEnd = sceKernelGetProcessTimeWide();
+}
+
+void Platform_PresentBattle(const PortBattleFrame *f)
+{
+    PerfFrame(sceKernelGetProcessTimeWide());
+    vita2d_wait_rendering_done();
+    if (f->stageSerial != sStageSerial || !sBattleOn) {
+        Upload(sStageTex, f->stage, 480, 272, 480);
+        sStageSerial = f->stageSerial;
+    }
+    Upload(sFieldTex, f->field, f->fieldW, f->fieldH, f->fieldPitch);
+    Upload(sUiTex, f->ui, 240, 160, f->uiPitch);
+    Upload(sHudTex, f->hud, 240, 160, 240);
+    sBattle = *f;
+    sBattleOn = 1;
+    sLastW = 480;
+    sLastH = 272;
+    sLastZoom = 272;
 
     vita2d_pool_reset();
     DrawGame();
@@ -300,18 +403,51 @@ static void AudioInit(void)
 
 /* ---------------------------------------------------- menu (START+SELECT) */
 
-enum { MI_VIEW, MI_STYLE, MI_FPS, MI_HOENN, MI_EXP, MI_BACK, MI_COUNT };
+void Port_StateRequest(int load);
+int Port_StateResult(void);
+int Port_StateExists(void);
+void PortCheat_MaxMoney(void);
+
+enum {
+    MI_H_DISPLAY, MI_VIEW, MI_STYLE, MI_FPS,
+    MI_H_GAME, MI_HOENN, MI_TURBO,
+    MI_H_CHEATS, MI_EXP, MI_MONEY, MI_ENC, MI_SHINY, MI_RANDOM, MI_FLEE, MI_RUN,
+    MI_H_STATE, MI_SAVE, MI_LOAD,
+    MI_BACK, MI_COUNT
+};
+
+static int IsHeader(int item)
+{
+    return item == MI_H_DISPLAY || item == MI_H_GAME || item == MI_H_CHEATS || item == MI_H_STATE;
+}
+
+static char sMenuNote[96];
 
 static void MenuLine(int item, char *buf, size_t size)
 {
     static const char *views[] = {"GBA (240x160)", "Weitsicht (480x272)"};
-    static const char *styles[] = {"Weich", "Scharf", "Pixelgenau"};
+    static const char *enc[] = {"Aus", "Normal", "Hoch"};
+    const char *onoff[] = {"Aus", "An"};
     switch (item) {
+        case MI_H_DISPLAY: snprintf(buf, size, "ANZEIGE"); break;
         case MI_VIEW: snprintf(buf, size, "Ansicht: %s", views[gPortConfig.viewMode]); break;
-        case MI_STYLE: snprintf(buf, size, "Bilddarstellung: %s", styles[gPortConfig.displayStyle]); break;
+        case MI_STYLE: snprintf(buf, size, "Bilddarstellung: %s",
+                                gPortConfig.displayStyle == PORT_STYLE_HQ ? "HQ (geglaettet)" : "Pixelgenau"); break;
         case MI_FPS: snprintf(buf, size, "Bildrate: %s", gPortConfig.frameRate30 ? "30 (Spieltempo bleibt)" : "60"); break;
+        case MI_H_GAME: snprintf(buf, size, "SPIEL"); break;
         case MI_HOENN: snprintf(buf, size, "Pokemon: %s", gPortConfig.gen3Wild ? "Nur Hoenn (3. Gen.)" : "Original"); break;
-        case MI_EXP: snprintf(buf, size, "Cheat EP: %dx", gPortConfig.expMult); break;
+        case MI_TURBO: snprintf(buf, size, "Turbo (rechter Stick hoch halten): %dx", gPortConfig.turbo); break;
+        case MI_H_CHEATS: snprintf(buf, size, "CHEATS (bis zum Beenden, EP bleibt gespeichert)"); break;
+        case MI_EXP: snprintf(buf, size, "EP-Bonus: %dx", gPortConfig.expMult); break;
+        case MI_MONEY: snprintf(buf, size, "Geld auf Maximum setzen"); break;
+        case MI_ENC: snprintf(buf, size, "Begegnungsrate: %s", enc[gPortCheats.encounters]); break;
+        case MI_SHINY: snprintf(buf, size, "Hohe Shiny-Chance (1:32): %s", onoff[gPortCheats.shiny]); break;
+        case MI_RANDOM: snprintf(buf, size, "Zufalls-Pokemon: %s", onoff[gPortCheats.randomSpecies]); break;
+        case MI_FLEE: snprintf(buf, size, "Immer fliehen: %s", onoff[gPortCheats.alwaysFlee]); break;
+        case MI_RUN: snprintf(buf, size, "Rennen in Gebaeuden: %s", onoff[gPortCheats.runIndoors]); break;
+        case MI_H_STATE: snprintf(buf, size, "SCHNELLSPEICHERN"); break;
+        case MI_SAVE: snprintf(buf, size, "Zustand speichern"); break;
+        case MI_LOAD: snprintf(buf, size, "Zustand laden%s", Port_StateExists() ? "" : " (keiner da)"); break;
         default: snprintf(buf, size, "Zurueck zum Spiel"); break;
     }
 }
@@ -321,14 +457,24 @@ static int Wrap(int v, int d, int n)
     return (v + d + n) % n;
 }
 
-/* Changes an item; returns 1 when the menu should close. */
+/* Changes an item (d -1/+1: left/right, 0: X); returns 1 when the menu
+ * should close. */
 static int MenuChange(int item, int d)
 {
     switch (item) {
         case MI_VIEW: gPortConfig.viewMode = Wrap(gPortConfig.viewMode, d ? d : 1, 2); break;
-        case MI_STYLE: gPortConfig.displayStyle = Wrap(gPortConfig.displayStyle, d ? d : 1, 3); break;
+        case MI_STYLE:
+            if (gPortConfig.displayStyle == PORT_STYLE_HQ) {
+                gPortConfig.displayStyle = PORT_STYLE_PIXEL;
+            } else if (VitaHq_Available()) {
+                gPortConfig.displayStyle = PORT_STYLE_HQ;
+            } else {
+                snprintf(sMenuNote, sizeof(sMenuNote), "HQ braucht ur0:data/libshacccg.suprx (siehe log.txt)");
+            }
+            break;
         case MI_FPS: gPortConfig.frameRate30 ^= 1; break;
         case MI_HOENN: gPortConfig.gen3Wild ^= 1; break;
+        case MI_TURBO: gPortConfig.turbo = 2 + Wrap(gPortConfig.turbo - 2, d ? d : 1, 3); break;
         case MI_EXP: {
             static const int steps[] = {1, 2, 4, 8};
             int k = 0;
@@ -337,6 +483,33 @@ static int MenuChange(int item, int d)
             gPortConfig.expMult = steps[Wrap(k, d ? d : 1, 4)];
             break;
         }
+        case MI_MONEY:
+            if (d == 0) {
+                PortCheat_MaxMoney();
+                snprintf(sMenuNote, sizeof(sMenuNote), "Geld: 999999");
+            }
+            break;
+        case MI_ENC: gPortCheats.encounters = Wrap(gPortCheats.encounters, d ? d : 1, 3); break;
+        case MI_SHINY: gPortCheats.shiny ^= 1; break;
+        case MI_RANDOM: gPortCheats.randomSpecies ^= 1; break;
+        case MI_FLEE: gPortCheats.alwaysFlee ^= 1; break;
+        case MI_RUN: gPortCheats.runIndoors ^= 1; break;
+        case MI_SAVE:
+            if (d == 0) {
+                Port_StateRequest(0);
+                return 1;
+            }
+            break;
+        case MI_LOAD:
+            if (d == 0) {
+                if (!Port_StateExists()) {
+                    snprintf(sMenuNote, sizeof(sMenuNote), "Kein Zustand dieser Version gespeichert");
+                    break;
+                }
+                Port_StateRequest(1);
+                return 1;
+            }
+            break;
         case MI_BACK:
             if (d == 0)
                 return 1;
@@ -347,21 +520,26 @@ static int MenuChange(int item, int d)
 
 static void RunMenu(void)
 {
-    static int sel;
+    static int sel = MI_VIEW;
     unsigned prev = ~0u;
     char line[160];
 
     Platform_Log("[ui] menu open\n");
+    sMenuNote[0] = 0;
     for (;;) {
         SceCtrlData pad;
         unsigned pressed;
-        int i, close = 0;
+        int i, close = 0, y;
 
         sceCtrlPeekBufferPositive(0, &pad, 1);
         pressed = pad.buttons & ~prev;
         prev = pad.buttons;
-        if (pressed & SCE_CTRL_UP) sel = Wrap(sel, -1, MI_COUNT);
-        if (pressed & SCE_CTRL_DOWN) sel = Wrap(sel, 1, MI_COUNT);
+        if (pressed & SCE_CTRL_UP)
+            do sel = Wrap(sel, -1, MI_COUNT); while (IsHeader(sel));
+        if (pressed & SCE_CTRL_DOWN)
+            do sel = Wrap(sel, 1, MI_COUNT); while (IsHeader(sel));
+        if (pressed & (SCE_CTRL_LEFT | SCE_CTRL_RIGHT | SCE_CTRL_CROSS))
+            sMenuNote[0] = 0;
         if (pressed & SCE_CTRL_LEFT) close = MenuChange(sel, -1);
         if (pressed & SCE_CTRL_RIGHT) close = MenuChange(sel, 1);
         if (pressed & SCE_CTRL_CROSS) close = MenuChange(sel, 0) || close;
@@ -370,15 +548,24 @@ static void RunMenu(void)
 
         vita2d_pool_reset();
         DrawGame();
-        vita2d_draw_rectangle(0, 0, 960, 544, RGBA8(0, 0, 0, 190));
-        vita2d_pgf_draw_text(sFont, 60, 50, RGBA8(90, 160, 255, 255), 1.3f, GAME_NAME " Vita " PKR_PORT_VERSION);
-        for (i = 0; i < MI_COUNT; i++) {
+        vita2d_draw_rectangle(0, 0, 960, 544, RGBA8(0, 0, 0, 200));
+        vita2d_pgf_draw_text(sFont, 60, 44, RGBA8(90, 160, 255, 255), 1.2f, GAME_NAME " Vita " PKR_PORT_VERSION);
+        for (i = 0, y = 76; i < MI_COUNT; i++) {
+            if (IsHeader(i))
+                y += 8;
             MenuLine(i, line, sizeof(line));
-            vita2d_pgf_draw_text(sFont, 80, 100 + i * 30, i == sel ? RGBA8(255, 230, 80, 255) : RGBA8(220, 220, 220, 255),
-                                 1.0f, line);
+            if (IsHeader(i))
+                vita2d_pgf_draw_text(sFont, 60, y, RGBA8(90, 160, 255, 255), 0.8f, line);
+            else
+                vita2d_pgf_draw_text(sFont, 90, y, i == sel ? RGBA8(255, 230, 80, 255) : RGBA8(220, 220, 220, 255),
+                                     0.85f, line);
+            if (i == sel)
+                vita2d_pgf_draw_text(sFont, 70, y, RGBA8(255, 230, 80, 255), 0.85f, ">");
+            y += 21;
         }
-        vita2d_pgf_draw_text(sFont, 60, 100 + sel * 30, RGBA8(255, 230, 80, 255), 1.0f, ">");
-        vita2d_pgf_draw_text(sFont, 60, 525, RGBA8(150, 150, 150, 255), 0.85f,
+        if (sMenuNote[0])
+            vita2d_pgf_draw_text(sFont, 520, 44, RGBA8(255, 200, 120, 255), 0.8f, sMenuNote);
+        vita2d_pgf_draw_text(sFont, 60, 530, RGBA8(150, 150, 150, 255), 0.8f,
                              "Steuerkreuz: waehlen/aendern   X: ausfuehren   O/START: zurueck");
         vita2d_end_drawing();
         vita2d_wait_rendering_done();
@@ -388,8 +575,10 @@ static void RunMenu(void)
             break;
     }
     Port_ConfigSave();
-    Platform_Log("[ui] menu closed: hoenn=%d view=%d style=%d fps30=%d\n", gPortConfig.gen3Wild, gPortConfig.viewMode, gPortConfig.displayStyle,
-                 gPortConfig.frameRate30);
+    Platform_Log("[ui] menu closed: hoenn=%d view=%d style=%d fps30=%d turbo=%d cheats=%d%d%d%d%d\n",
+                 gPortConfig.gen3Wild, gPortConfig.viewMode, gPortConfig.displayStyle, gPortConfig.frameRate30,
+                 gPortConfig.turbo, gPortCheats.encounters, gPortCheats.shiny, gPortCheats.randomSpecies,
+                 gPortCheats.alwaysFlee, gPortCheats.runIndoors);
     sAnchored = 0; /* the menu stalled the game: re-anchor the pacing */
 }
 
@@ -426,6 +615,7 @@ uint16_t Platform_PollKeys(void)
     if ((pad.buttons & SCE_CTRL_DOWN) || pad.ly > 128 + 64) keys |= DPAD_DOWN;
     if ((pad.buttons & SCE_CTRL_LEFT) || pad.lx < 128 - 64) keys |= DPAD_LEFT;
     if ((pad.buttons & SCE_CTRL_RIGHT) || pad.lx > 128 + 64) keys |= DPAD_RIGHT;
+    sTurbo = pad.ry < 128 - 80;   /* right stick up held */
     return keys;
 }
 

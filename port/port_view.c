@@ -170,13 +170,15 @@ static void Reset(void)
         virtuappu_mode1_obj_dx[i] = virtuappu_mode1_obj_dy[i] = 0;
 }
 
-/* ---- text windows (BG0) to the edges of the wide frame ----------------
+/* ---- text windows (BG0) in the wide frame ------------------------------
  * The game draws its windows (message box, menus, yes/no, map name) into
  * BG0 of the GBA screen. They are found as rectangles of non-empty tiles
- * and drawn at the matching edge of the wide frame: left/middle/right and
- * top/middle/bottom like on the GBA; boxes as wide as the GBA screen are
- * stretched to the full width (the right part keeps its place, a column
- * near the right edge is repeated). */
+ * and keep their GBA size. Windows at the top stay at the top (left/middle/
+ * right like on the GBA); all others keep their GBA arrangement as one
+ * block at the bottom left (8 px from the edge): the message box with its
+ * yes/no box, the battle's text and command boxes, ... */
+#define WIN_LEFT 8
+
 static void AddRegion(int x0, int x1, int y0, int y1, int dx, int dy)
 {
     int n = virtuappu_mode1_bg_region_count[0];
@@ -191,11 +193,8 @@ static void AddRegion(int x0, int x1, int y0, int y1, int dx, int dy)
     virtuappu_mode1_bg_region_count[0] = n + 1;
 }
 
-static struct {
-    int x0, x1, y0, y1, dx, dy, split, rdx;
-    int moves, mc0, mr0, mdx[4], mdy[4];   /* battle move list in one row */
-} sWin[16];
-int gPortViewBattle;   /* set by the battle stage: battle layout */
+static struct { int x0, x1, y0, y1, dx, dy; } sWin[16];
+int gPortViewBattle;   /* set by the battle stage */
 static int sWinCount;
 
 /* entry (tx, ty) of a text BG map of 32/64 x 32/64 tiles */
@@ -209,14 +208,11 @@ static inline u16 MapEntry(const u16 *map, int wide64, int tall64, int tx, int t
 }
 
 /* one window: tile rect [c0,c1]x[r0,r1] of the visible BG0 tiles */
-/* rx: right edge of a stretched box (0: like on the GBA), hdxIn: fixed
- * horizontal offset (-1: by position) */
-static void PlaceWindow(const u16 *map, int wide64, int tall64, int hofs, int vofs, int c0, int c1, int r0, int r1,
-                        int rxIn, int hdxIn)
+static void PlaceWindow(int hofs, int vofs, int c0, int c1, int r0, int r1)
 {
     int gx0 = c0 * 8 - (hofs & 7), gx1 = (c1 + 1) * 8 - (hofs & 7);
     int gy0 = r0 * 8 - (vofs & 7), gy1 = (r1 + 1) * 8 - (vofs & 7);
-    int hdx, vdy, split = 9999, rdx = 0;
+    int hdx, vdy;
     const int ex = PORT_WIDE_W - PORT_GBA_W, ey = PORT_WIDE_H - PORT_GBA_H;
 
     if (gx0 < 0) gx0 = 0;
@@ -225,164 +221,23 @@ static void PlaceWindow(const u16 *map, int wide64, int tall64, int hofs, int vo
     if (gy1 > PORT_GBA_H) gy1 = PORT_GBA_H;
     if (gx0 >= gx1 || gy0 >= gy1)
         return;
-    vdy = gy0 <= 8 ? 0 : gy1 >= 100 ? ey : ey / 2;
-    hdx = (gx0 + gx1) / 2 < 80 ? 0 : (gx0 + gx1) / 2 > 160 ? ex : ex / 2;
-    if (hdxIn >= 0)
-        hdx = hdxIn;
-
-    if (gx1 - gx0 >= 26 * 8 || rxIn > 0) {
-        /* A box across the GBA screen goes across the wide frame.
-         * Battle boxes use one map entry for their empty cells: they are
-         * stretched at the end of the longest run of equal columns (after
-         * the text, between text box and command box). Field boxes have a
-         * tile of their own per cell (the text is drawn into the tiles), so
-         * the column after the left border - never text - is repeated
-         * between the box and its right border. */
-        int x, cc, k, run = 0, bestRun = 0, fillCol = -1, fx, rx = rxIn > 0 ? rxIn : PORT_WIDE_W - (PORT_GBA_W - gx1);
-        hdx = 0;
-        for (cc = c0 + 1; cc <= c1; cc++) {
-            int same = 1;
-            for (k = r0; k <= r1 && same; k++)
-                same = MapEntry(map, wide64, tall64, (hofs >> 3) + cc, (vofs >> 3) + k) ==
-                       MapEntry(map, wide64, tall64, (hofs >> 3) + cc - 1, (vofs >> 3) + k);
-            run = same ? run + 1 : 0;
-            if (same && run >= bestRun) {
-                bestRun = run;
-                fillCol = cc;
-            }
-        }
-        if (bestRun >= 3) {
-            int rest;
-            fx = fillCol * 8 - (hofs & 7);
-            rest = gx1 - (fx + 8);
-            AddRegion(gx0, fx + 8, gy0 + vdy, gy1 + vdy, 0, vdy);
-            for (x = fx + 8; x < rx - rest; x += 8)
-                AddRegion(x, x + 8 < rx - rest ? x + 8 : rx - rest, gy0 + vdy, gy1 + vdy, x - fx, vdy);
-            AddRegion(rx - rest, rx, gy0 + vdy, gy1 + vdy, rx - gx1, vdy);
-            split = fx + 8;
-        } else {
-            fx = gx0 + 8;   /* the column after the left border */
-            AddRegion(gx0, gx1 - 8, gy0 + vdy, gy1 + vdy, 0, vdy);
-            for (x = gx1 - 8; x < rx - 8; x += 8)
-                AddRegion(x, x + 8 < rx - 8 ? x + 8 : rx - 8, gy0 + vdy, gy1 + vdy, x - fx, vdy);
-            AddRegion(rx - 8, rx, gy0 + vdy, gy1 + vdy, rx - gx1, vdy);
-            split = gx1 - 8;
-        }
-        rdx = rx - gx1;
-    } else {
-        AddRegion(gx0 + hdx, gx1 + hdx, gy0 + vdy, gy1 + vdy, hdx, vdy);
+    if (gy0 <= 8) {       /* top windows: map name, save info, start menu */
+        vdy = 0;
+        hdx = (gx0 + gx1) / 2 < 80 ? 0 : (gx0 + gx1) / 2 > 160 ? ex : ex / 2;
+    } else {              /* the rest: one block, bottom left */
+        vdy = ey;
+        hdx = WIN_LEFT;
     }
+    AddRegion(gx0 + hdx, gx1 + hdx, gy0 + vdy, gy1 + vdy, hdx, vdy);
     if (sWinCount < 16) {
         sWin[sWinCount].x0 = gx0; sWin[sWinCount].x1 = gx1;
         sWin[sWinCount].y0 = gy0; sWin[sWinCount].y1 = gy1;
         sWin[sWinCount].dx = hdx; sWin[sWinCount].dy = vdy;
-        sWin[sWinCount].split = split;
-        sWin[sWinCount].rdx = rdx;
-        sWin[sWinCount].moves = 0;
         sWinCount++;
     }
 }
 
 struct Rect { int c0, c1, r0, r1; };
-
-#define CELL(c, r) MapEntry(map, wide64, tall64, (hofs >> 3) + (c), (vofs >> 3) + (r))
-
-/* Battle: boxes side by side are one run of tiles; a box starts where a
- * column repeats the first column (same frame tiles: move list | PP box)
- * or where the palette changes in every row (message box | command box). */
-static int SplitBoxes(const u16 *map, int wide64, int tall64, int hofs, int vofs, struct Rect *rect, int n)
-{
-    int i, s, r;
-    for (i = 0; i < n; i++) {
-        struct Rect *q = &rect[i];
-        for (s = q->c0 + 2; s < q->c1; s++) {
-            int same = 1, pal = 1;
-            for (r = q->r0; r <= q->r1; r++) {
-                u16 a = CELL(s, r), b = CELL(s - 1, r);
-                if (a != CELL(q->c0, r))
-                    same = 0;
-                if (!(a & 0x3FF) || !(b & 0x3FF) || (a >> 12) == (b >> 12))
-                    pal = 0;
-            }
-            if ((same && q->r1 > q->r0) || pal) {
-                if (n < 64) {
-                    rect[n] = *q;
-                    rect[n].c0 = s;
-                    q->c1 = s - 1;
-                    n++;
-                }
-                break;
-            }
-        }
-    }
-    return n;
-}
-
-/* The four moves of the move list (2x2 on the GBA) in one row. */
-static int MoveRow(const u16 *map, int wide64, int tall64, int hofs, int vofs, const struct Rect *q, int rx)
-{
-    int gx0 = q->c0 * 8 - (hofs & 7), gy0 = q->r0 * 8 - (vofs & 7), gy1 = (q->r1 + 1) * 8 - (vofs & 7);
-    const int vdy = PORT_WIDE_H - PORT_GBA_H;
-    int blank = -1, c, r, m, slot, y;
-    if (q->c1 - q->c0 != 21 || q->r1 - q->r0 != 5 || gx0 != 0)
-        return 0;
-    for (c = q->c1 - 1; c > q->c0 && blank < 0; c--) {   /* an empty column */
-        int ok = 1;
-        for (r = q->r0 + 2; r < q->r1 && ok; r++)
-            ok = CELL(c, r) == CELL(c, q->r0 + 1);
-        if (ok)
-            blank = c;
-    }
-    if (blank < 0 || sWinCount >= 16)
-        return 0;
-    AddRegion(0, 8, gy0 + vdy, gy1 + vdy, 0, vdy);
-    for (c = 8; c < rx - 8; c += 8)
-        AddRegion(c, c + 8 < rx - 8 ? c + 8 : rx - 8, gy0 + vdy, gy1 + vdy, c - blank * 8, vdy);
-    AddRegion(rx - 8, rx, gy0 + vdy, gy1 + vdy, rx - 8 - q->c1 * 8, vdy);
-    slot = (rx - 16) / 4;
-    y = gy0 + vdy + 16;
-    for (m = 0; m < 4; m++) {
-        int sx = (q->c0 + 1 + (m & 1) * 10) * 8, sy = gy0 + 8 + (m >> 1) * 16;
-        int dx = 8 + m * slot + (slot - 80) / 2;
-        AddRegion(dx, dx + 80, y, y + 16, dx - sx, y - sy);
-        sWin[sWinCount].mdx[m] = dx - sx;
-        sWin[sWinCount].mdy[m] = y - sy;
-    }
-    sWin[sWinCount].x0 = gx0; sWin[sWinCount].x1 = gx0 + (q->c1 - q->c0 + 1) * 8;
-    sWin[sWinCount].y0 = gy0; sWin[sWinCount].y1 = gy1;
-    sWin[sWinCount].dx = 0; sWin[sWinCount].dy = vdy;
-    sWin[sWinCount].split = 9999; sWin[sWinCount].rdx = 0;
-    sWin[sWinCount].moves = 1;
-    sWin[sWinCount].mc0 = gx0; sWin[sWinCount].mr0 = gy0;
-    sWinCount++;
-    return 1;
-}
-
-/* Battle: two boxes side by side at the bottom - the right one to the
- * right edge, the left one stretched up to it (the move list: one row). */
-static int BattleWindow(const u16 *map, int wide64, int tall64, int hofs, int vofs, const struct Rect *rect, int n, int i)
-{
-    const struct Rect *q = &rect[i];
-    int k;
-    if ((q->r1 + 1) * 8 - (vofs & 7) < 150)
-        return 0;
-    for (k = 0; k < n; k++) {
-        const struct Rect *o = &rect[k];
-        if (k == i || o->r0 != q->r0 || o->r1 != q->r1)
-            continue;
-        if (o->c0 == q->c1 + 1) {          /* q is the left box */
-            int rx = o->c0 * 8 - (hofs & 7) + PORT_WIDE_W - PORT_GBA_W;
-            if (!MoveRow(map, wide64, tall64, hofs, vofs, q, rx))
-                PlaceWindow(map, wide64, tall64, hofs, vofs, q->c0, q->c1, q->r0, q->r1, rx, 0);
-            return 1;
-        }
-        if (o->c1 + 1 == q->c0) {          /* q is the right box */
-            PlaceWindow(map, wide64, tall64, hofs, vofs, q->c0, q->c1, q->r0, q->r1, 0, PORT_WIDE_W - PORT_GBA_W);
-            return 1;
-        }
-    }
-    return 0;
-}
 
 void PortView_PlaceWindows(void)
 {
@@ -400,6 +255,11 @@ void PortView_PlaceWindows(void)
     virtuappu_mode1_bg_dx[0] = 0;
     virtuappu_mode1_bg_dy[0] = 0;
     virtuappu_mode1_bg_region_count[0] = 0;
+    /* no window: nothing of BG0 (the columns beyond the GBA screen may hold
+     * leftovers of closed windows) */
+    virtuappu_mode1_bg_clip_on[0] = 1;
+    virtuappu_mode1_bg_clip_x0[0] = virtuappu_mode1_bg_clip_x1[0] = 0;
+    virtuappu_mode1_bg_clip_y0[0] = virtuappu_mode1_bg_clip_y1[0] = 0;
     sWinCount = 0;
 
 #ifndef __vita__
@@ -445,16 +305,23 @@ void PortView_PlaceWindows(void)
         }
     }
     (void)seen; (void)merged; (void)j;
-    if (gPortViewBattle)
-        nrect = SplitBoxes(map, wide64, tall64, hofs, vofs, rect, nrect);
     for (i = 0; i < nrect; i++) {
 #ifndef __vita__
         if (getenv("PKR_DUMP_BG0") && Port_FrameCounter() == (u32)atoi(getenv("PKR_DUMP_BG0")))
             fprintf(stderr, "rect c%d-%d r%d-%d hofs=%d vofs=%d\n", rect[i].c0, rect[i].c1, rect[i].r0, rect[i].r1, hofs, vofs);
 #endif
-        if (!gPortViewBattle || !BattleWindow(map, wide64, tall64, hofs, vofs, rect, nrect, i))
-            PlaceWindow(map, wide64, tall64, hofs, vofs, rect[i].c0, rect[i].c1, rect[i].r0, rect[i].r1, 0, -1);
+        PlaceWindow(hofs, vofs, rect[i].c0, rect[i].c1, rect[i].r0, rect[i].r1);
     }
+}
+
+/* 1 when the GBA pixel (x, y) is in a text window */
+int PortView_InWindow(int x, int y)
+{
+    int w;
+    for (w = 0; w < sWinCount; w++)
+        if (x >= sWin[w].x0 && x < sWin[w].x1 && y >= sWin[w].y0 && y < sWin[w].y1)
+            return 1;
+    return 0;
 }
 
 /* An OAM entry inside a text window moves with the window; returns 1. */
@@ -467,18 +334,17 @@ int PortView_SpriteInWindow(int i)
     for (w = 0; w < sWinCount; w++) {
         int cx = gPortOamX[i] + 4, cy = gPortOamY[i] + 4;
         if (cx >= sWin[w].x0 && cx < sWin[w].x1 && cy >= sWin[w].y0 && cy < sWin[w].y1) {
-            if (sWin[w].moves) {   /* the cursor of a move */
-                int m = (cx >= sWin[w].mc0 + 88 ? 1 : 0) + (cy >= sWin[w].mr0 + 24 ? 2 : 0);
-                virtuappu_mode1_obj_dx[i] = (s16)sWin[w].mdx[m];
-                virtuappu_mode1_obj_dy[i] = (s16)sWin[w].mdy[m];
-                return 1;
-            }
-            virtuappu_mode1_obj_dx[i] = (s16)(cx >= sWin[w].split ? sWin[w].rdx : sWin[w].dx);
+            virtuappu_mode1_obj_dx[i] = (s16)sWin[w].dx;
             virtuappu_mode1_obj_dy[i] = (s16)sWin[w].dy;
             return 1;
         }
     }
     return 0;
+}
+
+/* after loading a savestate (nothing kept between frames yet) */
+void PortView_Reset(void)
+{
 }
 
 int PortView_BeginFrame(void)

@@ -23,6 +23,7 @@
 #include "port/port_view.h"
 
 #include "global.h"
+#include "palette.h"
 #include "main.h"
 
 typedef void (*IntrFunc)(void);
@@ -110,6 +111,58 @@ static void PreLine(int line)
         RaiseIrq(INTR_FLAG_VCOUNT);
 }
 
+/* ---- the backdrop of GBA sized screens -------------------------------- */
+static uint32_t sSnap[PORT_WIDE_H * PORT_WIDE_W], sBackdrop[PORT_WIDE_H * PORT_WIDE_W];
+static int sSnapValid, sBackdropOn;
+const uint32_t *PortStage_StageImage(void);
+int PortIsTitleScreen(void);
+
+/* box blur (radius r) across and down, then dimmed */
+static void MakeBackdrop(const uint32_t *src, int pitch)
+{
+    static uint32_t tmp[PORT_WIDE_H * PORT_WIDE_W];
+    const int r = 6, W = PORT_WIDE_W, H = PORT_WIDE_H, n = 2 * r + 1;
+    int x, y, pass;
+    for (y = 0; y < H; y++)
+        memcpy(tmp + y * W, src + y * pitch, W * 4);
+    for (pass = 0; pass < 2; pass++) {
+        for (y = 0; y < H; y++) {           /* across: tmp -> sBackdrop */
+            const uint32_t *s = tmp + y * W;
+            uint32_t *d = sBackdrop + y * W;
+            unsigned rs = 0, gs = 0, bs = 0;
+            for (x = -r; x <= r; x++) {
+                uint32_t c = s[x < 0 ? 0 : x];
+                rs += c & 255; gs += (c >> 8) & 255; bs += (c >> 16) & 255;
+            }
+            for (x = 0; x < W; x++) {
+                uint32_t a = s[x + r + 1 >= W ? W - 1 : x + r + 1], b = s[x - r < 0 ? 0 : x - r];
+                d[x] = (bs / n) << 16 | (gs / n) << 8 | (rs / n);
+                rs += (a & 255) - (b & 255); gs += ((a >> 8) & 255) - ((b >> 8) & 255);
+                bs += ((a >> 16) & 255) - ((b >> 16) & 255);
+            }
+        }
+        for (x = 0; x < W; x++) {           /* down: sBackdrop -> tmp */
+            unsigned rs = 0, gs = 0, bs = 0;
+            for (y = -r; y <= r; y++) {
+                uint32_t c = sBackdrop[(y < 0 ? 0 : y) * W + x];
+                rs += c & 255; gs += (c >> 8) & 255; bs += (c >> 16) & 255;
+            }
+            for (y = 0; y < H; y++) {
+                uint32_t a = sBackdrop[(y + r + 1 >= H ? H - 1 : y + r + 1) * W + x];
+                uint32_t b = sBackdrop[(y - r < 0 ? 0 : y - r) * W + x];
+                tmp[y * W + x] = (bs / n) << 16 | (gs / n) << 8 | (rs / n);
+                rs += (a & 255) - (b & 255); gs += ((a >> 8) & 255) - ((b >> 8) & 255);
+                bs += ((a >> 16) & 255) - ((b >> 16) & 255);
+            }
+        }
+    }
+    for (x = 0; x < W * H; x++) {           /* dimmed to 55 % */
+        uint32_t c = tmp[x];
+        sBackdrop[x] = 0xFF000000u | ((((c >> 16) & 255) * 140 >> 8) << 16) | ((((c >> 8) & 255) * 140 >> 8) << 8) |
+                       ((c & 255) * 140 >> 8);
+    }
+}
+
 #define FIELD_W 480   /* pitch (the renderer wants at least 480) */
 
 static void RenderFrame(void)
@@ -139,6 +192,39 @@ static void RenderFrame(void)
 #endif
     int stage = wide ? 0 : PortStage_BeginFrame();
     int width, height, zoom;
+    static int lastKind, wasFading;   /* 0 GBA sized, 1 wide, 2 battle */
+    if (gPortConfig.viewMode != PORT_VIEW_FULL || PortIsTitleScreen()) {
+        if (sBackdropOn)
+            Platform_SetBackdrop(NULL);
+        sBackdropOn = sSnapValid = 0;
+    } else if (!wide && !stage) {
+        /* a GBA sized screen after the wide scene: the scene behind it */
+        if (lastKind == 1 && sSnapValid) {
+            MakeBackdrop(sSnap, PORT_WIDE_W);
+            Platform_SetBackdrop(sBackdrop);
+            sBackdropOn = 1;
+        } else if (lastKind == 2) {
+            MakeBackdrop(PortStage_StageImage(), PORT_WIDE_W);
+            Platform_SetBackdrop(sBackdrop);
+            sBackdropOn = 1;
+        }
+    } else if (wide && !stage) {
+        /* the scene as it was before the screen faded out */
+        int fading = gPaletteFade.active || gPaletteFade.y;
+        if (!fading && (sFrameCounter % 16 == 0 || !sSnapValid)) {
+            int y;
+            for (y = 0; y < PORT_WIDE_H; y++)
+                memcpy(sSnap + y * PORT_WIDE_W, sFrameBuffer + y * FRAME_MAX_W, PORT_WIDE_W * 4);
+            sSnapValid = 1;
+        } else if (fading && !wasFading) {
+            int y;
+            for (y = 0; y < PORT_WIDE_H; y++)
+                memcpy(sSnap + y * PORT_WIDE_W, sFrameBuffer + y * FRAME_MAX_W, PORT_WIDE_W * 4);
+            sSnapValid = 1;
+        }
+        wasFading = fading;
+    }
+    lastKind = stage ? 2 : wide ? 1 : 0;
     if (stage)
         wide = 1;
     width = wide ? PORT_WIDE_W : PORT_GBA_W;
@@ -191,10 +277,9 @@ static void RenderFrame(void)
         virtuappu_mode1_pre_line_callback = NULL;
         virtuappu_mode1_render_frame(&ppu);
         STAGE_T(1);
-        PortStage_Compose(sFrameBuffer, FRAME_MAX_W, field, FIELD_W, ui, FIELD_W);
-        STAGE_T(2);
         Port_ProfileEnd(PORT_PROF_RENDER);
-        Platform_Present(sFrameBuffer, width, height, FRAME_MAX_W, zoom);
+        PortStage_Present(field, FIELD_W, ui, FIELD_W);
+        STAGE_T(2);
         return;
     }
 
@@ -263,9 +348,12 @@ static void HostRunFrame(void)
 
 /* ---- BIOS calls that touch the flow of the program -------------------- */
 
+void Port_StateFrame(void);
+
 void VBlankIntrWait(void)
 {
     HostRunFrame();
+    Port_StateFrame();
 }
 
 void SoftReset(u32 resetFlags)

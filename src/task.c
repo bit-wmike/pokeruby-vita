@@ -7,7 +7,13 @@
 #define TAIL_SENTINEL 0xFF
 
 // gTasks is a queue of the active 16 tasks
+#ifdef PORT
+/* room up to task id 0xFF: the game reads gTasks[0xFF] ("no task", e.g. the
+ * bag's list drawn without a task); on the GBA that reads other RAM */
+struct Task gTasks[256];
+#else
 struct Task gTasks[NUM_TASKS];
+#endif
 
 static void InsertTask(u8 newTaskId);
 static u8 FindFirstActiveTask();

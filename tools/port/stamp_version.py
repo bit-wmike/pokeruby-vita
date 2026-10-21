@@ -22,7 +22,9 @@ def main():
                                           fill=(0, 0, 0, 120))
     im = Image.alpha_composite(im, box)
     ImageDraw.Draw(im).text((x, y), text, font=font, fill=(255, 255, 255, 235))
-    im.convert("RGB" if Image.open(src).mode == "RGB" else im.mode).save(dst, optimize=True)
+    # the Vita shows LiveArea images only as 8-bit palette PNGs (else grey)
+    im.convert("RGB").quantize(colors=256, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).save(
+        dst, optimize=True)
 
 
 if __name__ == "__main__":

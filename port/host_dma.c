@@ -23,6 +23,13 @@ struct HostHdma {
 };
 
 static struct HostHdma sHdma[4];
+
+/* for savestates (port_state.c) */
+void *HostDma_State(unsigned *size)
+{
+    *size = sizeof(sHdma);
+    return sHdma;
+}
 __attribute__((no_sanitize_address))
 static void Transfer(const u8 *src, u8 *dst, u32 units, u32 unitSize, u32 control)
 {

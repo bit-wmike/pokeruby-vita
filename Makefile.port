@@ -53,7 +53,7 @@ ARCHFLAGS := -march=armv7-a -mtune=cortex-a9 -mfpu=neon -mfloat-abi=hard -mthumb
 OPT ?= -O2 -g -ffunction-sections -fdata-sections
 LDLIBS := -Wl,-q -Wl,--gc-sections -lvita2d -lSceDisplay_stub -lSceCtrl_stub -lSceTouch_stub -lSceAudio_stub \
           -lScePower_stub -lSceAppUtil_stub -lSceAppMgr_stub -lSceSysmodule_stub -lSceRtc_stub \
-          -lSceCommonDialog_stub -lSceGxm_stub -lScePgf_stub -lpthread -lm
+          -lSceCommonDialog_stub -lSceGxm_stub -lScePgf_stub -lSceShaccCg_stub_weak -lpthread -lm
 PLATFORM_SRC := $(wildcard platform/vita/source/*.c)
 OUT := $(BUILD)/pokemon_vita.elf
 # ARM: the data assembly needs no conversion
@@ -80,7 +80,7 @@ endif
 # their end then hit the next table like in the ROM).
 GAME_CFLAGS := $(ARCHFLAGS) $(OPT) -std=gnu11 -funsigned-char -fwrapv -fno-strict-aliasing \
                -fno-delete-null-pointer-checks -fno-common -w \
-               -fno-toplevel-reorder
+               -fno-toplevel-reorder -fno-data-sections
 PORT_CFLAGS := $(ARCHFLAGS) $(OPT) -ffp-contract=off -std=gnu11 -funsigned-char -fwrapv -fno-strict-aliasing -Wall -Wno-unused-function
 INCLUDES := -iquote include -I . -Iport/ppu/include
 
@@ -102,14 +102,15 @@ $(OUT): $(GAME_OBJ) $(DATA_OBJ) $(PORT_OBJ) $(GEN_OBJ)
 # Game C: preprocessor -> charmap strings -> ARM-only bits removed and
 # assembly-only functions translated (from the GBA build's object) -> compiler.
 # The game's .bss becomes game_bss so RegisterRamReset can clear exactly the
-# game's variables.
+# game's variables; .bss and .data (game_data) are also what a savestate
+# keeps of them (port/port_state.c).
 $(BUILD)/src/%.o: src/%.c tools/port/naked2c.py tools/port/asm2c.py port/asm_rt.h
 	@mkdir -p $(dir $@)
 	@$(CC) $(ARCHFLAGS) -std=gnu11 -E $(GAME_DEFS) $(INCLUDES) -iquote $(dir $<) $< -o $(BUILD)/src/$*.i
 	@$(PREPROC) $(BUILD)/src/$*.i charmap.txt > $(BUILD)/src/$*.pp0.c
 	@$(PYTHON) tools/port/naked2c.py $(BUILD)/src/$*.pp0.c $(BUILD)/src/$*.pp.c --obj $(GBA_BUILD)/src/$*.o
 	$(CC) $(GAME_CFLAGS) -c -x c $(BUILD)/src/$*.pp.c -o $@
-	@$(OBJCOPY) --rename-section .bss=game_bss $@
+	@$(OBJCOPY) --rename-section .bss=game_bss --rename-section .data=game_data $@
 
 # Data assembly (scripts, maps, tables) and songs.
 $(BUILD)/data/%.o: data/%.s tools/port/as_host.py

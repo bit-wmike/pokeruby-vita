@@ -309,10 +309,41 @@ static u8 PickWildMonNature(void)
     return Random() % 25;
 }
 
+#ifdef PORT
+int PortCheatEncounters(void);
+int PortCheatShiny(void);
+unsigned short PortCheatSpecies(unsigned short species, unsigned rnd);
+#endif
+
 static void CreateWildMon(u16 species, u8 b)
 {
+#ifdef PORT
+    u8 nature;
+    species = PortCheatSpecies(species, Random32());
+    nature = PickWildMonNature();
+    ZeroEnemyPartyMons();
+    if (PortCheatShiny() && Random() % 32 == 0)
+    {
+        /* a shiny one with the same nature: personality halves XOR the
+         * trainer id halves to less than 8 */
+        u32 otId = gSaveBlock2.playerTrainerId[0] | (gSaveBlock2.playerTrainerId[1] << 8)
+                 | (gSaveBlock2.playerTrainerId[2] << 16) | ((u32)gSaveBlock2.playerTrainerId[3] << 24);
+        u32 personality;
+        do
+        {
+            u16 lo = Random();
+            u16 hi = (u16)((otId >> 16) ^ (otId & 0xFFFF) ^ lo ^ (Random() & 7));
+            personality = ((u32)hi << 16) | lo;
+        }
+        while (GetNatureFromPersonality(personality) != nature);
+        CreateMon(&gEnemyParty[0], species, b, 0x20, 1, personality, 0, 0);
+        return;
+    }
+    CreateMonWithNature(&gEnemyParty[0], species, b, 0x20, nature);
+#else
     ZeroEnemyPartyMons();
     CreateMonWithNature(&gEnemyParty[0], species, b, 0x20, PickWildMonNature());
+#endif
 }
 
 static bool8 GenerateWildMon(const struct WildPokemonInfo *wildMonInfo, u8 area, bool8 checkRepel)
@@ -407,6 +438,10 @@ u16 debug_sub_809283C(u16 attempts)
 static bool8 DoWildEncounterTest(u32 encounterRate, bool8 ignoreAbility)
 {
     encounterRate *= 16;
+#ifdef PORT
+    if (PortCheatEncounters() == 2)   /* cheat: often */
+        encounterRate *= 4;
+#endif
     if (TestPlayerAvatarFlags(PLAYER_AVATAR_FLAG_MACH_BIKE | PLAYER_AVATAR_FLAG_ACRO_BIKE))
         encounterRate = encounterRate * 80 / 100;
     ApplyFluteEncounterRateMod(&encounterRate);
@@ -430,6 +465,10 @@ static bool8 DoWildEncounterTest(u32 encounterRate, bool8 ignoreAbility)
 
 static bool8 DoGlobalWildEncounterDiceRoll(void)
 {
+#ifdef PORT
+    if (PortCheatEncounters() == 2)
+        return TRUE;
+#endif
     if (Random() % 100 >= 60)
         return FALSE;
     else
@@ -443,6 +482,10 @@ bool8 StandardWildEncounter(u16 curMetatileBehavior, u16 prevMetatileBehavior)
 
     if (gWildEncountersDisabled == TRUE)
         return 0;
+#ifdef PORT
+    if (PortCheatEncounters() == 0)   /* cheat: no wild Pokemon */
+        return 0;
+#endif
     else
     {
         headerNum = GetCurrentMapWildMonHeader();

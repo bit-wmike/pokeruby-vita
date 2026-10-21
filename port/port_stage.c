@@ -51,7 +51,11 @@
 #define FY 56
 #define SX(gx) (((gx) + FX0) * 3 / 2)
 #define SY(gy) ((gy) * 3 / 2 + FY)
-#define KEY 0x00FF00FFu /* backdrop key (alpha 0) */
+/* backdrop key (alpha 0): the stage's mean colour with low bits no palette
+ * colour has, so sprites blended with the backdrop (Water Gun bubbles, ...)
+ * get a fitting colour */
+static u32 sKey = 0x00FF00FFu;
+#define KEY sKey
 
 extern s16 gPortOamX[128], gPortOamY[128];
 extern u16 gPortOamTag[128];
@@ -419,8 +423,20 @@ void CB2_InitBattleInternal(void);
 void BattleMainCB2(void);
 extern int gPortBattleIntro;   /* src/battle/anim/battle_intro.c */
 extern int gPortViewBattle;    /* port_view.c: battle window layout */
+extern int gPortDexPage;       /* src/pokedex.c */
 
 static u32 sStageW[H][W];      /* the stage with the weather tint */
+
+/* after loading a savestate: build the stage again */
+void PortStage_Reset(void)
+{
+    sState = 0;
+}
+
+const u32 *PortStage_StageImage(void)
+{
+    return &sStageW[0][0];
+}
 
 static int StageWanted(void)
 {
@@ -445,7 +461,7 @@ int PortStage_BeginFrame(void)
 
 static int IsHud(int i)
 {
-    return gPortOamTag[i] >= 55039 && gPortOamTag[i] <= 55060;
+    return gPortOamTag[i] >= 55039 && gPortOamTag[i] <= 55061;   /* healthboxes, party balls */
 }
 
 static void ClearKnobs(void)
@@ -515,6 +531,16 @@ void PortStage_FieldPass(int *w, int *h)
 {
     int b, i;
     PlanUi();
+#ifndef __vita__
+    if (getenv("PKR_STAGE_OAM") && Port_FrameCounter() == (u32)atoi(getenv("PKR_STAGE_OAM"))) {
+        extern u8 gHostOam[];
+        for (i = 0; i < 128; i++) {
+            u16 a0 = gHostOam[i * 8] | (gHostOam[i * 8 + 1] << 8);
+            if ((a0 & 0x300) == 0x200) continue;
+            fprintf(stderr, "[oam] %d x=%d y=%d tag=%u ui=%d\n", i, gPortOamX[i], gPortOamY[i], gPortOamTag[i], sUiObj[i]);
+        }
+    }
+#endif
     ClearKnobs();
     for (b = 1; b <= 2; b++) {
         virtuappu_mode1_bg_dx[b] = -FX0 & 511;
@@ -545,28 +571,6 @@ void PortStage_UiPass(void)
             virtuappu_mode1_obj_dy[i] = 4000;
 }
 
-/* copy a GBA sized rect of the UI picture to (x0+dx.., y0+dy..) */
-static void Blit(u32 *fb, int pitch, const u32 *ui, int upitch, int x0, int y0, int x1, int y1, int dx, int dy)
-{
-    const u32 key = KEY & 0x00FFFFFFu;
-    int x, y;
-    if (x0 < 0) x0 = 0;
-    if (y0 < 0) y0 = 0;
-    if (x1 > PORT_GBA_W) x1 = PORT_GBA_W;
-    if (y1 > PORT_GBA_H) y1 = PORT_GBA_H;
-    if (x0 + dx < 0) x0 = -dx;
-    if (y0 + dy < 0) y0 = -dy;
-    if (x1 + dx > W) x1 = W - dx;
-    if (y1 + dy > H) y1 = H - dy;
-    for (y = y0; y < y1; y++) {
-        const u32 *s = ui + y * upitch;
-        u32 *d = fb + (y + dy) * pitch + dx;
-        for (x = x0; x < x1; x++)
-            if ((s[x] & 0xFFFFFFu) != key)
-                d[x] = s[x];
-    }
-}
-
 static void ObjBox(int i, int *x, int *y, int *w, int *h)
 {
     extern u8 gHostOam[];
@@ -578,7 +582,7 @@ static void ObjBox(int i, int *x, int *y, int *w, int *h)
     u16 a0 = gHostOam[i * 8] | (gHostOam[i * 8 + 1] << 8), a1 = gHostOam[i * 8 + 2] | (gHostOam[i * 8 + 3] << 8);
     int shape = (a0 >> 14) & 3, size = (a1 >> 14) & 3;
     if ((a0 & 0x300) == 0x200 || shape == 3) {
-        *w = *h = 0;
+        *x = *y = *w = *h = 0;
         return;
     }
     *w = sz[shape][size][0];
@@ -623,16 +627,36 @@ static void BakeWeather(void)
     case WEATHER_DROUGHT: tint = 0xFF80E0FFu; t = 60; break;
     case WEATHER_SUNNY: tint = 0xFF80E0FFu; t = 25; break;
     }
-    for (y = 0; y < H; y++)
-        for (x = 0; x < W; x++)
-            sStageW[y][x] = t ? Mix(sStage[y][x], tint, t) : sStage[y][x];
+    {
+        u32 r = 0, g = 0, b = 0, n = 0;
+        for (y = 0; y < H; y++)
+            for (x = 0; x < W; x++) {
+                u32 c = sStageW[y][x] = t ? Mix(sStage[y][x], tint, t) : sStage[y][x];
+                if (y >= FY) {
+                    r += c & 255; g += (c >> 8) & 255; b += (c >> 16) & 255; n++;
+                }
+            }
+        sKey = (((b / n) & 0xF8) << 16 | ((g / n) & 0xF8) << 8 | ((r / n) & 0xF8)) | 0x070707u;
+    }
 }
 
-/* moving weather (rain, sand, ash, snow) on the stage pixels (mask) */
-static void Particles(u32 *fb, int pitch, const u8 *bg)
+/* moving weather (rain, sand, ash, snow): lines over the stage */
+static PortParticle sPart[1024];
+static int sNPart;
+
+static void AddPart(int x0, int y0, int x1, int y1, u32 c)
+{
+    if (sNPart < 1024) {
+        PortParticle *p = &sPart[sNPart++];
+        p->x0 = (s16)x0; p->y0 = (s16)y0; p->x1 = (s16)x1; p->y1 = (s16)y1; p->color = c;
+    }
+}
+
+static void Particles(void)
 {
     u32 seed = 1;
     int i, n, x, y;
+    sNPart = 0;
     switch (sWeather) {
     case WEATHER_RAIN_LIGHT:
     case WEATHER_RAIN_MED:
@@ -641,14 +665,9 @@ static void Particles(u32 *fb, int pitch, const u8 *bg)
         for (i = 0; i < n; i++) {
             int x0 = (int)(Rnd(&seed) % (W + 80)), sp = 9 + (int)(Rnd(&seed) % 5);
             int y0 = (int)((Rnd(&seed) + sFrame * sp) % (H + 40)) - 20;
-            int k;
             x0 = (x0 - (int)(sFrame * sp / 3)) % (W + 80);
             if (x0 < 0) x0 += W + 80;
-            for (k = 0; k < 10; k++) {
-                x = x0 - 40 - k / 3; y = y0 + k;
-                if (x >= 0 && x < W && y >= 0 && y < H && bg[y * W + x])
-                    fb[y * pitch + x] = Mix(fb[y * pitch + x], 0xFFF8E0C8u, 140);
-            }
+            AddPart(x0 - 40, y0, x0 - 43, y0 + 9, 0x8CF8E0C8u);
         }
         break;
     case WEATHER_SANDSTORM:
@@ -656,10 +675,7 @@ static void Particles(u32 *fb, int pitch, const u8 *bg)
             int sp = 4 + (int)(Rnd(&seed) % 6);
             x = (int)((Rnd(&seed) + sFrame * sp) % W);
             y = (int)((Rnd(&seed) + (sFrame * sp) / 5) % H);
-            if (bg[y * W + x])
-                fb[y * pitch + x] = 0xFF4890D0u;
-            if (x + 1 < W && bg[y * W + x + 1])
-                fb[y * pitch + x + 1] = 0xFF70B0E0u;
+            AddPart(x, y, x + 1, y, 0xFF4890D0u);
         }
         break;
     case WEATHER_ASH:
@@ -670,16 +686,85 @@ static void Particles(u32 *fb, int pitch, const u8 *bg)
             x = (int)((Rnd(&seed) + (sFrame + ph) / 3) % W);
             y = (int)((Rnd(&seed) + sFrame * sp / 2) % H);
             x = (x + ((((sFrame + ph) >> 4) & 1) ? 1 : 0)) % W;
-            if (bg[y * W + x])
-                fb[y * pitch + x] = col;
-            if (x + 1 < W && y + 1 < H && bg[(y + 1) * W + x + 1])
-                fb[(y + 1) * pitch + x + 1] = col;
+            AddPart(x, y, x + 1, y + 1, col);
         }
         break;
     }
 }
 
-/* average of two pixels; a key pixel takes the other one */
+/* ---- the frame -------------------------------------------------------- */
+
+static PortBlit sBlit[VIRTUAPPU_MODE1_MAX_REGIONS], sHudBlit[128];
+static u32 sHud[PORT_GBA_H][PORT_GBA_W];
+
+/* After both passes: the frame for the platform. */
+void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
+{
+    static unsigned serial;
+    static int lastState;
+    PortBattleFrame f;
+    int i, x, y, white = 0, fade = FadeAmount(&white), nblit = 0, nhud = 0;
+
+    if (sState != lastState || sFrame == 1)
+        serial++;
+    lastState = sState;
+    Particles();
+    for (i = 0; i < sRegCount; i++) {
+        const virtuappu_mode1_region *g = &sReg[i];
+        PortBlit *b = &sBlit[nblit++];
+        b->sx = (s16)(g->x0 - g->dx); b->sy = (s16)(g->y0 - g->dy);
+        b->w = (s16)(g->x1 - g->x0); b->h = (s16)(g->y1 - g->y0);
+        b->dx = (s16)g->x0; b->dy = (s16)g->y0;
+    }
+    /* healthboxes: their own picture without the window pixels under them */
+    for (i = 0; i < 128; i++) {
+        int ox, oy, ow, oh, x0, y0, x1, y1;
+        if (!sUiObj[i])
+            continue;
+        ObjBox(i, &ox, &oy, &ow, &oh);
+        x0 = ox < 0 ? 0 : ox; y0 = oy < 0 ? 0 : oy;
+        x1 = ox + ow > PORT_GBA_W ? PORT_GBA_W : ox + ow; y1 = oy + oh > PORT_GBA_H ? PORT_GBA_H : oy + oh;
+        if (x0 >= x1 || y0 >= y1)
+            continue;
+        if (IsHud(i)) {
+            for (y = y0; y < y1; y++)
+                for (x = x0; x < x1; x++)
+                    sHud[y][x] = PortView_InWindow(x, y) ? 0 : ui[y * upitch + x];
+            sHudBlit[nhud].sx = (s16)x0; sHudBlit[nhud].sy = (s16)y0;
+            sHudBlit[nhud].w = (s16)(x1 - x0); sHudBlit[nhud].h = (s16)(y1 - y0);
+            sHudBlit[nhud].dx = (s16)(x0 + sUiDx[i]); sHudBlit[nhud].dy = (s16)(y0 + sUiDy[i]);
+            nhud++;
+        } else if (nblit < VIRTUAPPU_MODE1_MAX_REGIONS) {   /* a sprite on a window */
+            PortBlit *b = &sBlit[nblit++];
+            b->sx = (s16)x0; b->sy = (s16)y0; b->w = (s16)(x1 - x0); b->h = (s16)(y1 - y0);
+            b->dx = (s16)(x0 + sUiDx[i]); b->dy = (s16)(y0 + sUiDy[i]);
+        }
+    }
+    memset(&f, 0, sizeof(f));
+    f.stage = &sStageW[0][0];
+    f.stageSerial = serial;
+    f.parts = sPart;
+    f.nparts = sNPart;
+    f.fadeColor = white ? 0xFFFFFFFFu : 0xFF000000u;
+    f.fade = fade > 255 ? 255 : fade;
+    f.field = field;
+    f.fieldPitch = fpitch;
+    f.fieldW = FW;
+    f.fieldH = FH;
+    /* the dex page of a caught Pokemon: the whole GBA picture on the stage */
+    f.fieldY = gPortDexPage ? (H - FH * 3 / 2) / 2 : FY;
+    f.ui = ui;
+    f.uiPitch = upitch;
+    f.blits = sBlit;
+    f.nblits = nblit;
+    f.hud = &sHud[0][0];
+    f.hudBlits = sHudBlit;
+    f.nhud = nhud;
+    Platform_PresentBattle(&f);
+}
+
+/* ---- the frame in software (host, and the Vita without GPU path) ------- */
+
 static inline u32 Avg(u32 a, u32 b)
 {
     if (!(a >> 24))
@@ -700,17 +785,42 @@ static void Taps(int o, int *s0, int *s1)
     }
 }
 
-/* the frame: text windows and healthboxes (fb, keyed elsewhere) over the
- * field (1.5x) over the stage */
-void PortStage_Compose(u32 *fb, int pitch, const u32 *field, int fpitch, const u32 *ui, int upitch)
+static void CpuBlit(u32 *fb, int pitch, const u32 *src, int spitch, const PortBlit *b)
 {
-    static u8 bg[H * W];
+    int x, y;
+    for (y = 0; y < b->h; y++) {
+        int sy = b->sy + y, dy = b->dy + y;
+        if (sy < 0 || sy >= PORT_GBA_H || dy < 0 || dy >= H)
+            continue;
+        for (x = 0; x < b->w; x++) {
+            int sx = b->sx + x, dx = b->dx + x;
+            u32 c;
+            if (sx < 0 || sx >= PORT_GBA_W || dx < 0 || dx >= W)
+                continue;
+            c = src[sy * spitch + sx];
+            if (c >> 24)
+                fb[dy * pitch + dx] = c;
+        }
+    }
+}
+
+static void CpuLine(u32 *fb, int pitch, const PortParticle *p)
+{
+    int n = abs(p->x1 - p->x0) > abs(p->y1 - p->y0) ? abs(p->x1 - p->x0) : abs(p->y1 - p->y0), k;
+    int a = (int)(p->color >> 24);
+    for (k = 0; k <= n; k++) {
+        int x = n ? p->x0 + (p->x1 - p->x0) * k / n : p->x0, y = n ? p->y0 + (p->y1 - p->y0) * k / n : p->y0;
+        if (x >= 0 && x < W && y >= 0 && y < H)
+            fb[y * pitch + x] = a >= 255 ? p->color : Mix(fb[y * pitch + x], p->color | 0xFF000000u, a);
+    }
+}
+
+void PortStage_ComposeCpu(const PortBattleFrame *f, u32 *fb, int pitch)
+{
     static u32 row[FH][W];
     static short tx0[W], tx1[W];
     static int init;
-    int x, y, white = 0, fade = FadeAmount(&white);
-    u32 tint = white ? 0xFFFFFFFFu : 0xFF000000u;
-    const u32 key = KEY & 0x00FFFFFFu;
+    int x, y, i;
 
     if (!init) {
         int a, b;
@@ -721,69 +831,38 @@ void PortStage_Compose(u32 *fb, int pitch, const u32 *field, int fpitch, const u
         }
         init = 1;
     }
-    /* field rows scaled across (key pixels get alpha 0) */
-    for (y = 0; y < FH && SY(y) < H; y++) {
-        const u32 *s = field + y * fpitch;
-        u32 *d = row[y];
-        for (x = 0; x < W; x++) {
-            u32 a = s[tx0[x]], b = s[tx1[x]];
-            a = (a & 0xFFFFFFu) == key ? 0 : a | 0xFF000000u;
-            if (tx1[x] != tx0[x]) {
-                b = (b & 0xFFFFFFu) == key ? 0 : b | 0xFF000000u;
-                a = Avg(a, b);
-            }
-            d[x] = a;
-        }
-    }
-    for (y = 0; y < H; y++) {
-        u32 *p = fb + y * pitch;
-        const u32 *st = sStageW[y];
-        u8 *m = bg + y * W;
-        const u32 *r0 = NULL, *r1 = NULL;
-        if (y >= FY) {
-            int a, b;
-            Taps(y - FY, &a, &b);
-            if (b < FH) {
-                r0 = row[a];
-                r1 = row[b];
-            }
-        }
-        for (x = 0; x < W; x++) {
-            u32 c = 0;
-            if (r0)
-                c = r0 == r1 ? r0[x] : Avg(r0[x], r1[x]);
-            if (c >> 24) {
-                p[x] = c;
-                m[x] = 0;
-            } else {
-                p[x] = st[x];
-                m[x] = 1;
-            }
-        }
-    }
-    Particles(fb, pitch, bg);
-    if (fade > 0) {
-        if (fade > 256)
-            fade = 256;
+    for (y = 0; y < H; y++)
+        memcpy(fb + y * pitch, f->stage + y * W, W * 4);
+    for (i = 0; i < f->nparts; i++)
+        CpuLine(fb, pitch, &f->parts[i]);
+    if (f->fade > 0)
         for (y = 0; y < H; y++)
             for (x = 0; x < W; x++)
-                if (bg[y * W + x])
-                    fb[y * pitch + x] = Mix(fb[y * pitch + x], tint, fade);
-    }
-    /* the text windows and the sprites on them, the healthboxes */
-    {
-        int i;
-        for (i = 0; i < sRegCount; i++) {
-            const virtuappu_mode1_region *g = &sReg[i];
-            Blit(fb, pitch, ui, upitch, g->x0 - g->dx, g->y0 - g->dy, g->x1 - g->dx, g->y1 - g->dy, g->dx, g->dy);
-        }
-        for (i = 0; i < 128; i++) {
-            int ox, oy, ow, oh;
-            if (!sUiObj[i])
-                continue;
-            ObjBox(i, &ox, &oy, &ow, &oh);
-            if (ow)
-                Blit(fb, pitch, ui, upitch, ox, oy, ox + ow, oy + oh, sUiDx[i], sUiDy[i]);
+                fb[y * pitch + x] = Mix(fb[y * pitch + x], f->fadeColor, f->fade);
+    /* field rows scaled across, then down */
+    for (y = 0; y < f->fieldH && y * 3 / 2 + f->fieldY < H; y++) {
+        const u32 *s = f->field + y * f->fieldPitch;
+        for (x = 0; x < W; x++) {
+            u32 a = s[tx0[x]];
+            if (tx1[x] != tx0[x])
+                a = Avg(a, s[tx1[x]]);
+            row[y][x] = a;
         }
     }
+    for (y = f->fieldY; y < H; y++) {
+        int a, b;
+        u32 *p = fb + y * pitch;
+        Taps(y - f->fieldY, &a, &b);
+        if (b >= f->fieldH)
+            break;
+        for (x = 0; x < W; x++) {
+            u32 c = a == b ? row[a][x] : Avg(row[a][x], row[b][x]);
+            if (c >> 24)
+                p[x] = c;
+        }
+    }
+    for (i = 0; i < f->nblits; i++)
+        CpuBlit(fb, pitch, f->ui, f->uiPitch, &f->blits[i]);
+    for (i = 0; i < f->nhud; i++)
+        CpuBlit(fb, pitch, f->hud, PORT_GBA_W, &f->hudBlits[i]);
 }

@@ -913,8 +913,16 @@ static u8 Bike_CheckCollisionTryAdvanceCollisionCount(struct ObjectEvent *object
     return collision;
 }
 
+#ifdef PORT
+int PortCheatRunIndoors(void);
+#endif
+
 bool8 IsRunningDisallowed(u8 tile)
 {
+#ifdef PORT
+    if (PortCheatRunIndoors())   /* cheat: running in buildings */
+        return IsRunningDisallowedByMetatile(tile) != FALSE;
+#endif
     if (IsRunningDisallowedByMetatile(tile) != FALSE || gMapHeader.mapType == MAP_TYPE_INDOOR)
         return TRUE;
     else

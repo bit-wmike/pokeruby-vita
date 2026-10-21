@@ -650,6 +650,14 @@ s8 BattleSetup_GetEnvironmentId(void)
 {
     u16 tileBehavior;
     s16 x, y;
+#if defined(PORT) && !defined(__vita__)
+    {   /* host test: PKR_TEST_ENV=n forces the battle environment */
+        extern char *getenv(const char *);
+        extern int atoi(const char *);
+        if (getenv("PKR_TEST_ENV"))
+            return (s8)atoi(getenv("PKR_TEST_ENV"));
+    }
+#endif
 
     PlayerGetDestCoords(&x, &y);
     tileBehavior = MapGridGetMetatileBehaviorAt(x, y);

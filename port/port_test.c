@@ -18,6 +18,7 @@
 #include "pokemon.h"
 #include "battle_setup.h"
 #include "battle.h"
+#include "palette.h"
 #include "global.fieldmap.h"
 #include "constants/species.h"
 
@@ -85,8 +86,33 @@ static void TestWarp(void)
     fprintf(stderr, "[test] warp %d.%d (%d,%d) at frame %u\n", g, n, x, y, Port_FrameCounter());
 }
 
+u8 sub_809070C(u16 dexNum, u32 b, u32 c);
+
+/* PKR_TEST_DEX=frame: the dex page of a caught Pokemon (in a battle) */
+static void TestDex(void)
+{
+    static int frame = -2;
+    if (frame == -2)
+        frame = getenv("PKR_TEST_DEX") ? atoi(getenv("PKR_TEST_DEX")) : -1;
+    if (frame < 0 || (int)Port_FrameCounter() != frame)
+        return;
+    BeginNormalPaletteFade(0xFFFFFFFF, 0, 0, 16, 0);
+    sub_809070C(19, 0, 0);
+    fprintf(stderr, "[test] dex page at frame %u\n", Port_FrameCounter());
+}
+
+void Port_StateRequest(int load);
+
 void PortTest_Frame(void)
 {
+    {   /* PKR_STATE_SAVE=frame, PKR_STATE_LOAD=frame */
+        const char *a = getenv("PKR_STATE_SAVE"), *b = getenv("PKR_STATE_LOAD");
+        if (a && (int)Port_FrameCounter() == atoi(a))
+            Port_StateRequest(0);
+        if (b && (int)Port_FrameCounter() == atoi(b))
+            Port_StateRequest(1);
+    }
+    TestDex();
     if (getenv("PKR_POS") && Port_FrameCounter() % 60 == 0 && PortIsOverworld())
         fprintf(stderr, "[pos] %u map %d.%d (%d,%d)\n", Port_FrameCounter(), gSaveBlock1.location.mapGroup,
                 gSaveBlock1.location.mapNum, gSaveBlock1.pos.x, gSaveBlock1.pos.y);

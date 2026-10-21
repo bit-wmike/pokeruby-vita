@@ -47,10 +47,39 @@ static int ShotWanted(int frame)
     return strstr(sShotList, buf) != NULL;
 }
 
+void Platform_PresentBattle(const PortBattleFrame *f)
+{
+    static uint32_t fb[272 * 480];
+    PortStage_ComposeCpu(f, fb, 480);
+    Platform_Present(fb, 480, 272, 480, 272);
+}
+
+static const uint32_t *sBackdrop;
+
+void Platform_SetBackdrop(const uint32_t *pixels)
+{
+    sBackdrop = pixels;
+}
+
 void Platform_Present(const uint32_t *pixels, int width, int height, int pitch, int zoomHeight)
 {
     int frame = (int)Port_FrameCounter();
     (void)zoomHeight;
+    if (sBackdrop && width == 240 && height == 160 && ShotWanted(frame)) {
+        /* like the Vita: the backdrop 2x, the GBA screen 3x in the middle */
+        static uint32_t big[544 * 960];
+        int x, y;
+        for (y = 0; y < 544; y++)
+            for (x = 0; x < 960; x++)
+                big[y * 960 + x] = sBackdrop[(y / 2) * 480 + x / 2];
+        for (y = 0; y < 480; y++)
+            for (x = 0; x < 720; x++)
+                big[(y + 32) * 960 + x + 120] = pixels[(y / 3) * pitch + x / 3];
+        pixels = big;
+        width = 960;
+        height = 544;
+        pitch = 960;
+    }
     if (ShotWanted(frame)) {
         char path[1100];
         FILE *f;

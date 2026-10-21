@@ -51,6 +51,28 @@ uint64_t Platform_TimeUs(void);
 /* Shows a finished frame (ABGR8888, `pitch` pixels per row), scaled so that
  * `zoomHeight` lines fill the screen height. */
 void Platform_Present(const uint32_t *pixels, int width, int height, int pitch, int zoomHeight);
+/* A battle frame (480x272) in layers, put together by the platform (the
+ * Vita on its GPU): the stage, the moving weather, a fade over the stage,
+ * the field (GBA picture, 1.5x, transparent where the stage shows), then
+ * parts of the GBA sized UI picture (text windows) and of the healthbox
+ * picture at their places. PortStage_ComposeCpu does the same in software. */
+typedef struct PortBlit { int16_t sx, sy, w, h, dx, dy; } PortBlit;
+typedef struct PortParticle { int16_t x0, y0, x1, y1; uint32_t color; } PortParticle; /* line, ABGR */
+typedef struct PortBattleFrame {
+    const uint32_t *stage;  unsigned stageSerial;          /* 480x272 */
+    const PortParticle *parts; int nparts;
+    uint32_t fadeColor; int fade;                           /* 0..255 over the stage */
+    const uint32_t *field; int fieldPitch, fieldW, fieldH, fieldY;  /* alpha 0 = stage */
+    const uint32_t *ui; int uiPitch;                        /* 240x160, alpha 0 = nothing */
+    const PortBlit *blits; int nblits;
+    const uint32_t *hud;                                    /* 240x160, like ui */
+    const PortBlit *hudBlits; int nhud;
+} PortBattleFrame;
+void Platform_PresentBattle(const PortBattleFrame *f);
+/* Behind GBA sized screens (bag, party, shop, ...): the last wide scene,
+ * blurred and dimmed (480x272), or NULL for plain black. */
+void Platform_SetBackdrop(const uint32_t *pixels);
+void PortStage_ComposeCpu(const PortBattleFrame *f, uint32_t *fb, int pitch);
 /* Returns pressed GBA keys (KEY_A ... KEY_L bits), polled once per frame. */
 uint16_t Platform_PollKeys(void);
 /* Receives interleaved stereo s16 samples at PORT_AUDIO_RATE. */

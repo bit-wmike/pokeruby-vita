@@ -165,7 +165,16 @@ void AgbMain()
 
         PlayTimeCounter_Update();
         MapMusicMain();
+#ifdef PORT
+        {
+            extern int gPortInMainWait;   /* savestates happen only here */
+            gPortInMainWait = 1;
+            WaitForVBlank();
+            gPortInMainWait = 0;
+        }
+#else
         WaitForVBlank();
+#endif
     }
 }
 

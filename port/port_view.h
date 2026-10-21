@@ -22,11 +22,12 @@ int PortView_BeginFrame(void);
 /* BG0 text windows to the edges of the wide frame (also for the battle) */
 void PortView_PlaceWindows(void);
 int PortView_SpriteInWindow(int oamIndex);
+int PortView_InWindow(int x, int y);
 
 /* Battle stage (port/port_stage.c): 1 when this frame is a wide battle */
 int PortStage_BeginFrame(void);
 void PortStage_FieldPass(int *w, int *h);
 void PortStage_UiPass(void);
-void PortStage_Compose(uint32_t *fb, int pitch, const uint32_t *field, int fpitch, const uint32_t *ui, int upitch);
+void PortStage_Present(const uint32_t *field, int fpitch, const uint32_t *ui, int upitch);
 
 #endif

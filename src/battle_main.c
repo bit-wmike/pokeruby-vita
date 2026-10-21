@@ -5489,6 +5489,10 @@ void HandleAction_UseItem(void)
     gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
 }
 
+#ifdef PORT
+int PortCheatFlee(void);
+#endif
+
 bool8 TryRunFromBattle(u8 bank)
 {
     bool8 effect = FALSE;
@@ -5514,6 +5518,12 @@ bool8 TryRunFromBattle(u8 bank)
         gProtectStructs[bank].fleeFlag = 2;
         effect++;
     }
+#ifdef PORT
+    else if (PortCheatFlee())   /* cheat: fleeing always works */
+    {
+        effect++;
+    }
+#endif
     else
     {
         if (!(gBattleTypeFlags & BATTLE_TYPE_DOUBLE))
