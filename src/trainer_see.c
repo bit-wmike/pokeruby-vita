@@ -243,7 +243,7 @@ static bool8 (*const gTrainerSeeFuncList[])(u8 taskId, struct Task *task, struct
 static void RunTrainerSeeFuncList(u8 taskId)
 {
     struct Task *task = &gTasks[taskId];
-    struct ObjectEvent *trainerObj = (struct ObjectEvent *)((task->tTrainerObjHi << 16) | (task->tTrainerObjLo));
+    struct ObjectEvent *trainerObj = (struct ObjectEvent *)(((u32)(u16)task->tTrainerObjHi << 16) | (u16)task->tTrainerObjLo);
 
     if (!trainerObj->active)
     {

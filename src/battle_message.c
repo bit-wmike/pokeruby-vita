@@ -532,7 +532,11 @@ u32 BattleStringExpandPlaceholders(const u8* src, u8* dst)
 {
     u32 dstID = 0; // if they used dstID, why not use srcID as well?
     const u8* toCpy = NULL;
+#ifdef PORT
+    u8 text[32];   /* German item names (CopyItemName) are longer than 11 */
+#else
     u8 text[12];
+#endif
     u8 multiplayerID = GetMultiplayerId();
 
     while (*src != EOS)
@@ -837,7 +841,11 @@ void ExpandBattleTextBuffPlaceholders(u8* src, u8* dst)
 {
     u32 srcID = 1;
     u32 value = 0;
+#ifdef PORT
+    u8 text[32];   /* German item names (CopyItemName) are longer than 11 */
+#else
     u8 text[12];
+#endif
     u16 hword;
 
     *dst = EOS;

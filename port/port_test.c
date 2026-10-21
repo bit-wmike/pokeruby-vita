@@ -5,6 +5,7 @@
  *       give the player a Mudkip if the party is empty and start a wild
  *       battle against species/level (numbers from constants/species.h).
  *   PKR_TEST_TRAINER=frame:trainer      a trainer battle (constants/opponents.h)
+ *   PKR_TEST_WARP=frame:group:num:x:y   warp there (in the overworld)
  *   PKR_TEST_MOVES=first                in a battle: both sides use every move
  *       from `first` on (the first slot is replaced each turn), nobody
  *       faints - press A regularly (PKR_INPUT) to go through all animations.
@@ -17,6 +18,7 @@
 #include "pokemon.h"
 #include "battle_setup.h"
 #include "battle.h"
+#include "global.fieldmap.h"
 #include "constants/species.h"
 
 #include "port/port.h"
@@ -61,8 +63,34 @@ static void TestMoves(void)
     }
 }
 
+void Overworld_SetWarpDestination(s8 mapGroup, s8 mapNum, s8 warpId, s8 x, s8 y);
+void sub_8080E88(void);
+void ResetInitialPlayerAvatarState(void);
+
+static void TestWarp(void)
+{
+    static int parsed, frame = -1, g, n, x, y;
+    if (!parsed) {
+        const char *s = getenv("PKR_TEST_WARP");
+        parsed = 1;
+        if (s)
+            sscanf(s, "%d:%d:%d:%d:%d", &frame, &g, &n, &x, &y);
+    }
+    if (frame < 0 || (int)Port_FrameCounter() < frame || !PortIsOverworld())
+        return;
+    frame = -1;
+    Overworld_SetWarpDestination(g, n, -1, x, y);
+    sub_8080E88();
+    ResetInitialPlayerAvatarState();
+    fprintf(stderr, "[test] warp %d.%d (%d,%d) at frame %u\n", g, n, x, y, Port_FrameCounter());
+}
+
 void PortTest_Frame(void)
 {
+    if (getenv("PKR_POS") && Port_FrameCounter() % 60 == 0 && PortIsOverworld())
+        fprintf(stderr, "[pos] %u map %d.%d (%d,%d)\n", Port_FrameCounter(), gSaveBlock1.location.mapGroup,
+                gSaveBlock1.location.mapNum, gSaveBlock1.pos.x, gSaveBlock1.pos.y);
+    TestWarp();
     TestMoves();
     static int parsed, frame = -1, species, level, tframe = -1, trainer;
     if (!parsed) {
@@ -75,6 +103,11 @@ void PortTest_Frame(void)
     }
     if (tframe >= 0 && (int)Port_FrameCounter() >= tframe && PortIsOverworld()) {
         tframe = -1;
+        /* double battles need two Pokemon (the game checks that before) */
+        if (CalculatePlayerPartyCount() < 2) {
+            CreateMon(&gPlayerParty[1], SPECIES_ZIGZAGOON, 10, 32, 0, 0, 0, 0);
+            CalculatePlayerPartyCount();
+        }
         gTrainerBattleOpponent = (u16)trainer;
         BattleSetup_StartTrainerBattle();
         fprintf(stderr, "[test] trainer battle %d at frame %u\n", trainer, Port_FrameCounter());

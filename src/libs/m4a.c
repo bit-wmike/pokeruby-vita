@@ -654,6 +654,10 @@ void m4aMPlayStop(struct MusicPlayerInfo *mplayInfo)
     s32 i;
     struct MusicPlayerTrack *track;
 
+#ifdef PORT
+    if (!mplayInfo)   /* no cry played yet (reads the BIOS on the GBA) */
+        return;
+#endif
     if (mplayInfo->ident != ID_NUMBER)
         return;
 
@@ -1718,7 +1722,12 @@ void SetPokemonCryProgress(u32 val)
 
 bool32 IsPokemonCryPlaying(struct MusicPlayerInfo *mplayInfo)
 {
-    struct MusicPlayerTrack *track = mplayInfo->tracks;
+    struct MusicPlayerTrack *track;
+#ifdef PORT
+    if (!mplayInfo)
+        return FALSE;
+#endif
+    track = mplayInfo->tracks;
 
     if (track->chan && track->chan->track == track)
         return TRUE;
