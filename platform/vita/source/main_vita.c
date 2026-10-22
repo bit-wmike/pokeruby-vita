@@ -431,26 +431,46 @@ void Platform_SubmitAudio(const int16_t *samples, int frames)
     sRingWrite = w;
 }
 
+/* The game hands over 800 samples per frame; frames come a little
+ * unevenly (a late frame, a catch-up of two). The output keeps a cushion of
+ * about 50 ms in the ring and holds its level by stretching or squeezing a
+ * grain by one sample now and then (inaudible) - before 0.3.10 the ring ran
+ * nearly empty and every late frame was a hitch in the music (Mike: every
+ * 4-5 s). After running dry it waits for the cushion again. */
+#define AUDIO_TARGET 2400
 static int AudioThread(SceSize args, void *argp)
 {
     static int16_t buf[AUDIO_GRAIN * 2];
+    int filling = 1;
     (void)args;
     (void)argp;
     for (;;) {
-        uint32_t r = sRingRead;
-        int i;
-        for (i = 0; i < AUDIO_GRAIN; i++) {
-            if (r == sRingWrite) {
-                /* underrun: hold the last sample (no click) */
-                buf[i * 2] = i ? buf[i * 2 - 2] : sHoldL;
-                buf[i * 2 + 1] = i ? buf[i * 2 - 1] : sHoldR;
-            } else {
-                buf[i * 2] = sRing[(r & (RING_FRAMES - 1)) * 2];
-                buf[i * 2 + 1] = sRing[(r & (RING_FRAMES - 1)) * 2 + 1];
-                r++;
+        uint32_t r = sRingRead, level = sRingWrite - r;
+        int i, take = AUDIO_GRAIN;
+        if (filling && level >= AUDIO_TARGET)
+            filling = 0;
+        if (!filling && level < AUDIO_GRAIN)
+            filling = 1;   /* ran dry: wait for the cushion */
+        if (filling) {
+            for (i = 0; i < AUDIO_GRAIN; i++) {
+                buf[i * 2] = sHoldL;
+                buf[i * 2 + 1] = sHoldR;
             }
+            sceAudioOutOutput(sAudioPort, buf);
+            continue;
         }
-        sRingRead = r;
+        if (level < AUDIO_TARGET - 600)
+            take = AUDIO_GRAIN - 1;   /* stretch: one sample twice */
+        else if (level > AUDIO_TARGET + 600 && level > AUDIO_GRAIN + 1)
+            take = AUDIO_GRAIN + 1;   /* squeeze: one sample left out */
+        for (i = 0; i < AUDIO_GRAIN; i++) {
+            int si = take == AUDIO_GRAIN ? i : take < AUDIO_GRAIN ? (i < AUDIO_GRAIN / 2 ? i : i - 1)
+                                                                  : (i < AUDIO_GRAIN / 2 ? i : i + 1);
+            uint32_t k = r + (uint32_t)si;
+            buf[i * 2] = sRing[(k & (RING_FRAMES - 1)) * 2];
+            buf[i * 2 + 1] = sRing[(k & (RING_FRAMES - 1)) * 2 + 1];
+        }
+        sRingRead = r + (uint32_t)take;
         sHoldL = buf[AUDIO_GRAIN * 2 - 2];
         sHoldR = buf[AUDIO_GRAIN * 2 - 1];
         sceAudioOutOutput(sAudioPort, buf);
