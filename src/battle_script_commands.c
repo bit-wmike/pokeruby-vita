@@ -3433,7 +3433,15 @@ static void atk23_getexp(void)
             else
             {
                 // music change in wild battle after fainting a poke
-                if (!(gBattleTypeFlags & BATTLE_TYPE_TRAINER) && gBattleMons[0].hp && !gBattleStruct->wildVictorySong)
+                if (!(gBattleTypeFlags & BATTLE_TYPE_TRAINER) && gBattleMons[0].hp && !gBattleStruct->wildVictorySong
+#ifdef PORT
+                    // port: wild double battles - not while a wild Pokemon is still
+                    // fighting (Mike, 0.3.9)
+                    && !((gBattleTypeFlags & BATTLE_TYPE_DOUBLE)
+                         && ((gBattleMons[1].hp && !(gAbsentBattlerFlags & gBitTable[1]))
+                             || (gBattleMons[3].hp && !(gAbsentBattlerFlags & gBitTable[3]))))
+#endif
+                    )
                 {
                     BattleStopLowHpSound();
                     PlayBGM(MUS_VICTORY_WILD);
