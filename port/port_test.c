@@ -376,6 +376,38 @@ void PortTest_Frame(void)
                 gSaveBlock1.location.mapNum, gSaveBlock1.pos.x, gSaveBlock1.pos.y);
     TestWarp();
     TestMoves();
+#ifndef __vita__
+    if (getenv("PKR_OAM_WX") && Port_FrameCounter() % 30 == 0 && Port_FrameCounter() >= (u32)atoi(getenv("PKR_OAM_WX"))) {
+        /* weather sprites: how many per 60 px column of the wide view */
+        extern s16 gPortOamX[128];
+        extern u16 gPortOamTag[128];
+        extern int gPortViewExtraX;
+        int bins[16] = {0}, k, tot = 0;
+        for (k = 0; k < 128; k++)
+            if (gPortOamTag[k] >= 0x1200 && gPortOamTag[k] <= 0x12FF) {
+                int b = (gPortOamX[k] + gPortViewExtraX + 40) / 60;
+                if (b >= 0 && b < 16) bins[b]++;
+                tot++;
+            }
+        fprintf(stderr, "[wx] %u n=%d extra=%d:", Port_FrameCounter(), tot, gPortViewExtraX);
+        for (k = 0; k < 10; k++) fprintf(stderr, " %d", bins[k]);
+        fprintf(stderr, "\n");
+    }
+#endif
+    {   /* PKR_WEATHER=frame:id: the field weather (rain, ash, ...) */
+        static int wf = -2, wid;
+        if (wf == -2) {
+            const char *w = getenv("PKR_WEATHER");
+            wf = -1;
+            if (w)
+                sscanf(w, "%d:%d", &wf, &wid);
+        }
+        if (wf >= 0 && (int)Port_FrameCounter() >= wf && PortIsOverworld()) {
+            extern void SetWeather(u32 weather);
+            wf = -1;
+            SetWeather((u32)wid);
+        }
+    }
     static int parsed, frame = -1, species, level, tframe = -1, trainer;
     if (!parsed) {
         const char *s = getenv("PKR_TEST_BATTLE");

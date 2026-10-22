@@ -401,7 +401,7 @@ static s16 PortSpriteFullY(struct Sprite *sprite)
 static void PortWideWeatherSprites(u8 *oamIndex)
 {
     extern int gPortViewExtraX, gPortViewExtraY;
-    static const u16 sTags[] = {0x1201, 0x1202, 0x1203};
+    static const u16 sTags[] = {0x1201, 0x1202, 0x1203, 0x1204};
     int n = *oamIndex, t, j;
     if (gMain.inBattle && gPortConfig.viewMode == PORT_VIEW_FULL) {
         /* battle (wide stage, GBA x -40..280): rain and hail of Rain Dance
@@ -431,14 +431,38 @@ static void PortWideWeatherSprites(u8 *oamIndex)
     }
     if (gPortViewExtraX <= 0)
         return;
-    for (t = 0; t < 3; t++) {
+    /* rain: single drops that live on the GBA screen - copies one GBA
+     * screen to each side (Mike, 0.3.3) */
+    for (j = 0; j < n; j++) {
+        int k;
+        if (gPortOamStagedTag[j] != 0x1206)
+            continue;
+        for (k = -1; k <= 1; k += 2) {
+            int x = gPortOamStagedX[j] + k * 240;
+            if (x + 16 <= -gPortViewExtraX || x >= 240 + gPortViewExtraX)
+                continue;
+            if (*oamIndex >= gOamLimit)
+                return;
+            gMain.oamBuffer[*oamIndex] = gMain.oamBuffer[j];
+            gMain.oamBuffer[*oamIndex].x = x & 0x1FF;
+            gPortOamStagedX[*oamIndex] = (s16)x;
+            gPortOamStagedY[*oamIndex] = gPortOamStagedY[j];
+            gPortOamStagedTag[*oamIndex] = 0x1206;
+            (*oamIndex)++;
+        }
+    }
+    for (t = 0; t < 4; t++) {
         int minX = 10000, maxX = -10000, minY = 10000, maxY = -10000, w = 0, h = 0, px, py, any = 0;
         for (j = 0; j < n; j++) {
             int x, y;
             if (gPortOamStagedTag[j] != sTags[t])
                 continue;
-            x = ((gPortOamStagedX[j] + 256) & 511) - 256;   /* as the GBA wraps */
-            y = ((gPortOamStagedY[j] + 128) & 255) - 128;
+            /* as the GBA wraps: x -64..447, y -64..191 (0.3.3: the old
+             * -256..255 cut the ash grid at x 256..271 - a gap) */
+            x = gPortOamStagedX[j] & 511;
+            if (x >= 448) x -= 512;
+            y = gPortOamStagedY[j] & 255;
+            if (y >= 192) y -= 256;
             gPortOamStagedX[j] = (s16)x;
             gPortOamStagedY[j] = (s16)y;
             w = 8 << (gMain.oamBuffer[j].size + (gMain.oamBuffer[j].shape == 1));
