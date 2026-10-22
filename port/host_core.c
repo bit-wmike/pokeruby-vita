@@ -124,6 +124,7 @@ static void ReplayLine(int line)
         memcpy(gHostIo, sLineIo[line], sizeof(sLineIo[0]));
 }
 
+
 /* ---- the backdrop of GBA sized screens -------------------------------- */
 static uint32_t sSnap[PORT_WIDE_H * PORT_WIDE_W], sBackdrop[PORT_WIDE_H * PORT_WIDE_W];
 static int sSnapValid, sBackdropOn;

@@ -934,9 +934,17 @@ void PortStage_SetBgFillPixels(const u32 *pix, int pitch)
  * side, the lowest in front: grass looks like more grass, rocks like more
  * rocks */
 #define INTRO_STEP 14
+/* the copies' places below the band (rows down, pixels across), each the
+ * one before plus an uneven step: no staircase (Mike, 0.3.3) */
+#define INTRO_COPIES 9
+static const s16 sIntroOff[INTRO_COPIES][2] = {
+    {0, 0}, {17, 53}, {35, -38}, {50, 121}, {69, 12}, {86, -97}, {104, 77}, {121, -151}, {140, 33},
+};
+static const u8 *sIntroMask;
+static void ObjBox(int i, int *x, int *y, int *w, int *h);
 static void IntroRows(u32 *fl, int fpitch)
 {
-    int x, y, k, top = -1, bot = -1, start;
+    int x, y, k, top = -1, bot = -1;
     for (y = 0; y < FH; y++) {
         int n = 0;
         for (x = 0; x < FW; x += 4)
@@ -948,11 +956,45 @@ static void IntroRows(u32 *fl, int fpitch)
     }
     if (top < 0 || bot - top < INTRO_STEP + 4)
         return;
-    start = bot;
-    for (y = start; y < FH; y++) {
+    /* copy k lies k steps lower than the band and in front of the ones
+     * above it, from just under the band's top down to the screen's
+     * bottom: every copy's cut lower edge is covered by the next one
+     * (Mike, 0.3.3: no hard edge) */
+    /* where sprites are (they may stand in front of the scenery) */
+    {
+        static u8 mask[FH][FW];
+        int i;
+        memset(mask, 0, sizeof(mask));
+        for (i = 0; i < 128; i++) {
+            int ox, oy, ow, oh, xx, yy;
+            if (sUiObj[i])
+                continue;
+            ObjBox(i, &ox, &oy, &ow, &oh);
+            for (yy = oy < 0 ? 0 : oy; yy < oy + oh && yy < FH; yy++)
+                for (xx = ox + FX0 < 0 ? 0 : ox + FX0; xx < ox + FX0 + ow && xx < FW; xx++)
+                    mask[yy][xx] = 1;
+        }
+        sIntroMask = &mask[0][0];
+    }
+#ifndef __vita__
+    if (getenv("PKR_INTRO_DBG")) {
+        int same = 0, diff = 0, md = 0;
+        for (y = top; y < bot; y++)
+            for (x = 0; x < FW; x++) {
+                u32 a = fl[y * fpitch + x], c = sIntroPix[y * fpitch + x];
+                if (!(c >> 24)) continue;
+                if (a == c) same++; else { diff++; md += sIntroMask[y * FW + x]; }
+            }
+        fprintf(stderr, "[intro] %u top %d bot %d same %d diff %d (in boxes %d) ex %08x %08x\n", Port_FrameCounter(), top, bot, same, diff, md,
+                fl[100 * fpitch + 300], sIntroPix[100 * fpitch + 300]);
+    }
+#endif
+    for (y = top + sIntroOff[1][0]; y < FH; y++) {
         u32 *d = fl + y * fpitch;
-        for (k = 1; ; k++) {
-            int sy = y - k * INTRO_STEP, sh = (k * 7) % FW;
+        const u32 *own = sIntroPix + y * fpitch;
+        const u8 *m = sIntroMask + y * FW;
+        for (k = 1; k < INTRO_COPIES; k++) {
+            int sy = y - sIntroOff[k][0], sh = ((sIntroOff[k][1] % FW) + FW) % FW;
             const u32 *sr;
             if (sy < top)
                 break;
@@ -964,7 +1006,8 @@ static void IntroRows(u32 *fl, int fpitch)
                 u32 c;
                 if (sx < 0) sx += FW;
                 c = sr[sx];
-                if (c >> 24)
+                /* not over a sprite in front of the scenery */
+                if ((c >> 24) && (y >= bot || !m[x] || d[x] == own[x]))
                     d[x] = c;
             }
         }
@@ -1237,6 +1280,30 @@ void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
                 fl[y * fpitch + x] &= 0x00FFFFFFu;
         if (sIntroPix)
             IntroRows(fl, fpitch);
+#ifndef __vita__
+        if (sIntroPix && getenv("PKR_INTRO_DUMPI") && Port_FrameCounter() == (u32)atoi(getenv("PKR_INTRO_DUMPI"))) {
+            FILE *o = fopen("/tmp/w13/in.ppm", "wb");
+            fprintf(o, "P6 %d %d 255\n", FW, FH);
+            for (y = 0; y < FH; y++)
+                for (x = 0; x < FW; x++) {
+                    u32 c = sIntroPix[y * fpitch + x];
+                    if (!(c >> 24)) c = 0xFFFF00FF;
+                    fputc(c & 255, o); fputc((c >> 8) & 255, o); fputc((c >> 16) & 255, o);
+                }
+            fclose(o);
+        }
+        if (sIntroPix && getenv("PKR_INTRO_DUMP") && Port_FrameCounter() == (u32)atoi(getenv("PKR_INTRO_DUMP"))) {
+            FILE *o = fopen("/tmp/w13/fl.ppm", "wb");
+            fprintf(o, "P6 %d %d 255\n", FW, FH);
+            for (y = 0; y < FH; y++)
+                for (x = 0; x < FW; x++) {
+                    u32 c = fl[y * fpitch + x];
+                    if (!(c >> 24)) c = 0xFFFF00FF;
+                    fputc(c & 255, o); fputc((c >> 8) & 255, o); fputc((c >> 16) & 255, o);
+                }
+            fclose(o);
+        }
+#endif
     }
     f.field = field;
     f.fieldPitch = fpitch;
