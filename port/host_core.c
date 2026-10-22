@@ -125,6 +125,18 @@ static void ReplayLine(int line)
 }
 
 
+/* the intro scenery alone: no windows (they cut it), no blending, and when
+ * it sinks its rest position (the port moves it itself) */
+static void ReplayLineIntro(int line)
+{
+    extern int gPortIntroSink;
+    ReplayLine(line);
+    gHostIo[1] &= (u8)~0xE0;
+    gHostIo[0x50] = gHostIo[0x51] = 0;
+    if (gPortIntroSink)
+        gHostIo[0x16] = gHostIo[0x17] = 0;
+}
+
 /* ---- the backdrop of GBA sized screens -------------------------------- */
 static uint32_t sSnap[PORT_WIDE_H * PORT_WIDE_W], sBackdrop[PORT_WIDE_H * PORT_WIDE_W];
 static int sSnapValid, sBackdropOn;
@@ -288,7 +300,7 @@ static void RenderFrame(void)
                 static u8 io[0x56];
                 memcpy(io, gHostIo, sizeof(io));
                 virtuappu_mode1_set_output_buffer(intro, FIELD_W);
-                virtuappu_mode1_pre_line_callback = ReplayLine;
+                virtuappu_mode1_pre_line_callback = ReplayLineIntro;
                 virtuappu_mode1_render_frame(&ppu);
                 memcpy(gHostIo, io, sizeof(io));
                 PortStage_SetIntroPixels(intro);

@@ -42,6 +42,8 @@ static const TaskFunc sBattleIntroTaskFuncs[] =
 
 #ifdef PORT
 int gPortBattleIntro;   /* port: the intro scenery is shown (wide battle) */
+int gPortIntroTask = -1;   /* port: the intro task (its state: the scenery leaving) */
+int gPortIntroSink;        /* port: the scenery sinks (else it fades, water bobs) */
 #endif
 
 void HandleIntroSlide(u8 a)
@@ -72,6 +74,10 @@ void HandleIntroSlide(u8 a)
     gTasks[taskId].data[4] = 0;
     gTasks[taskId].data[5] = 0;
     gTasks[taskId].data[6] = 0;
+#ifdef PORT
+    gPortIntroTask = taskId;
+    gPortIntroSink = gTasks[taskId].func == BattleIntroTask_ScrollScenery;
+#endif
 }
 
 static void EndBattleIntroTask(u8 taskId)

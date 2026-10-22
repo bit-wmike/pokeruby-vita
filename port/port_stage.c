@@ -30,6 +30,7 @@
 #include "palette.h"
 #include "field_weather.h"
 #include "metatile_behavior.h"
+#include "task.h"
 #include "constants/map_types.h"
 #include "constants/weather.h"
 
@@ -758,6 +759,9 @@ static void FieldKnobs(int noObj)
         if (Wide(b) && !gPortBattleIntro)
             WrapRegions(b, 0, FH);
     }
+    /* the intro scenery (BG1) is drawn by the port in layers (IntroRows) */
+    if (gPortBattleIntro && !noObj)
+        virtuappu_mode1_bg_clip_x1[1] = 0;
 #ifndef __vita__
     if (getenv("PKR_STAGE_BGOFF"))
         virtuappu_mode1_bg_clip_x1[atoi(getenv("PKR_STAGE_BGOFF"))] = 0;
@@ -837,18 +841,22 @@ void PortStage_SetHudPixels(const u32 *pix)
 /* Pass 1b, while the intro scenery slides in: the scenery alone (no
  * sprites), copied down to the bottom of the screen (Mike, 0.3.3). */
 static const u32 *sIntroPix;
+static int sIntroOn;   /* the intro's layers are running */
 
 int PortStage_IntroPass(void)
 {
     if (!gPortBattleIntro || gPortDexPage)
         return 0;
     FieldKnobs(1);
+    virtuappu_mode1_bg_clip_x1[2] = 0;   /* BG1 alone */
     return 1;
 }
 
 void PortStage_SetIntroPixels(const u32 *pix)
 {
     sIntroPix = pix;
+    if (!pix)
+        sIntroOn = 0;
 }
 
 /* Pass 1c, while a move's background is up: BG1/BG2 alone over the whole
@@ -940,11 +948,27 @@ void PortStage_SetBgFillPixels(const u32 *pix, int pitch)
 static const s16 sIntroOff[INTRO_COPIES][2] = {
     {0, 0}, {17, 53}, {35, -38}, {50, 121}, {69, 12}, {86, -97}, {104, 77}, {121, -151}, {140, 33},
 };
-static const u8 *sIntroMask;
-static void ObjBox(int i, int *x, int *y, int *w, int *h);
+extern int gPortIntroTask;   /* src/battle/anim/battle_intro.c */
+
+/* The scenery in three layers - back (the GBA's band), middle (copies 1-3)
+ * and front (copies 4-8, down to the screen's bottom). They come up from
+ * below one after the other, front first, and sink away the other way
+ * round, front last: the front stays longest, the back shortest; each
+ * layer always lies over the cut lower edge of the one behind it
+ * (Mike, 0.3.3). */
+#define LAYER_DELAY 8
+#define LAYER_MOVE 20
+static int LayerOf(int k)
+{
+    return k == 0 ? 0 : k <= 3 ? 1 : 2;
+}
+
 static void IntroRows(u32 *fl, int fpitch)
 {
-    int x, y, k, top = -1, bot = -1;
+    static u32 startFrame, exitFrame;
+    static int exiting;
+    int x, y, k, top = -1, bot = -1, L, shift[3], show[3];
+    u32 now = Port_FrameCounter();
     for (y = 0; y < FH; y++) {
         int n = 0;
         for (x = 0; x < FW; x += 4)
@@ -954,60 +978,56 @@ static void IntroRows(u32 *fl, int fpitch)
             bot = y + 1;
         }
     }
-    if (top < 0 || bot - top < INTRO_STEP + 4)
-        return;
-    /* copy k lies k steps lower than the band and in front of the ones
-     * above it, from just under the band's top down to the screen's
-     * bottom: every copy's cut lower edge is covered by the next one
-     * (Mike, 0.3.3: no hard edge) */
-    /* where sprites are (they may stand in front of the scenery) */
-    {
-        static u8 mask[FH][FW];
-        int i;
-        memset(mask, 0, sizeof(mask));
-        for (i = 0; i < 128; i++) {
-            int ox, oy, ow, oh, xx, yy;
-            if (sUiObj[i])
-                continue;
-            ObjBox(i, &ox, &oy, &ow, &oh);
-            for (yy = oy < 0 ? 0 : oy; yy < oy + oh && yy < FH; yy++)
-                for (xx = ox + FX0 < 0 ? 0 : ox + FX0; xx < ox + FX0 + ow && xx < FW; xx++)
-                    mask[yy][xx] = 1;
-        }
-        sIntroMask = &mask[0][0];
+    if (!sIntroOn) {
+        startFrame = now;
+        exiting = 0;
+    }
+    sIntroOn = 1;
+    if (!exiting && gPortIntroTask >= 0 && gTasks[gPortIntroTask].data[0] == 3 && gTasks[gPortIntroTask].data[3] == 0) {
+        exiting = 1;
+        exitFrame = now;
     }
 #ifndef __vita__
-    if (getenv("PKR_INTRO_DBG")) {
-        int same = 0, diff = 0, md = 0;
-        for (y = top; y < bot; y++)
-            for (x = 0; x < FW; x++) {
-                u32 a = fl[y * fpitch + x], c = sIntroPix[y * fpitch + x];
-                if (!(c >> 24)) continue;
-                if (a == c) same++; else { diff++; md += sIntroMask[y * FW + x]; }
-            }
-        fprintf(stderr, "[intro] %u top %d bot %d same %d diff %d (in boxes %d) ex %08x %08x\n", Port_FrameCounter(), top, bot, same, diff, md,
-                fl[100 * fpitch + 300], sIntroPix[100 * fpitch + 300]);
-    }
+    if (getenv("PKR_INTRO_LOG"))
+        fprintf(stderr, "[intro] %u t=%d top=%d bot=%d exit=%d st=%d d3=%d\n", now, (int)(now - startFrame), top, bot, exiting,
+                gPortIntroTask >= 0 ? gTasks[gPortIntroTask].data[0] : -1, gPortIntroTask >= 0 ? gTasks[gPortIntroTask].data[3] : -1);
 #endif
-    for (y = top + sIntroOff[1][0]; y < FH; y++) {
-        u32 *d = fl + y * fpitch;
-        const u32 *own = sIntroPix + y * fpitch;
-        const u8 *m = sIntroMask + y * FW;
-        for (k = 1; k < INTRO_COPIES; k++) {
-            int sy = y - sIntroOff[k][0], sh = ((sIntroOff[k][1] % FW) + FW) % FW;
-            const u32 *sr;
-            if (sy < top)
-                break;
-            if (sy >= bot)
+    if (top < 0)
+        return;
+    for (L = 0; L < 3; L++) {
+        int minOff = sIntroOff[L == 0 ? 0 : L == 1 ? 1 : 4][0];
+        int h = (H - FY) * 2 / 3 - (top + minOff) + 2;   /* down to out of sight */
+        int in = (int)(now - startFrame) - (2 - L) * LAYER_DELAY;
+        show[L] = in >= 0;
+        shift[L] = in < 0 ? h : in < LAYER_MOVE ? h * (LAYER_MOVE - in) / LAYER_MOVE : 0;
+        if (exiting) {
+            int out = (int)(now - exitFrame) - L * LAYER_DELAY;
+            if (out >= LAYER_MOVE)
+                show[L] = 0;
+            else if (out > 0)
+                shift[L] = h * out / LAYER_MOVE;
+        }
+    }
+    for (k = 0; k < INTRO_COPIES; k++) {
+        int sh, dy;
+        L = LayerOf(k);
+        if (!show[L])
+            continue;
+        sh = ((sIntroOff[k][1] % FW) + FW) % FW;
+        dy = sIntroOff[k][0] + shift[L];
+        for (y = top; y < bot; y++) {
+            int ty = y + dy;
+            const u32 *sr = sIntroPix + y * fpitch;
+            u32 *d;
+            if (ty < 0 || ty >= FH)
                 continue;
-            sr = sIntroPix + sy * fpitch;
+            d = fl + ty * fpitch;
             for (x = 0; x < FW; x++) {
                 int sx = x - sh;
                 u32 c;
                 if (sx < 0) sx += FW;
                 c = sr[sx];
-                /* not over a sprite in front of the scenery */
-                if ((c >> 24) && (y >= bot || !m[x] || d[x] == own[x]))
+                if (c >> 24)
                     d[x] = c;
             }
         }
