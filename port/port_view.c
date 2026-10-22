@@ -417,3 +417,22 @@ int PortView_BeginFrame(void)
     }
     return 1;
 }
+
+/* how far beyond the GBA screen people and objects are kept alive and
+ * visible (src/event_object_movement.c): rooms are placed in the wide frame
+ * (centred or clamped), not around the GBA camera - so up to the whole
+ * extra width/height can lie on one side */
+static int PortViewIsRoom(void)
+{
+    return gMapHeader.mapType == MAP_TYPE_INDOOR || gMapHeader.mapType == MAP_TYPE_SECRET_BASE;
+}
+
+int PortViewObjectExtraX(void)
+{
+    return gPortViewExtraX * (PortViewIsRoom() ? 2 : 1);
+}
+
+int PortViewObjectExtraY(void)
+{
+    return gPortViewExtraY * (PortViewIsRoom() ? 2 : 1);
+}

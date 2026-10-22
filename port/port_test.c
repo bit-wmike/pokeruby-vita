@@ -279,6 +279,11 @@ static void TestPlan(void)
             else
                 FlagClear((u16)f);
         }
+    } else if (!strncmp(sStep, "savegame", 8)) {   /* in-game save here (e.g. for mGBA) */
+        extern u8 Save_WriteData(u8 saveType);
+        extern void SaveMapView(void);
+        SaveMapView();   /* as the start menu does before saving */
+        Save_WriteData(0);
     } else if (!strncmp(sStep, "style", 5)) {    /* style 0: switch question on */
         gSaveBlock2.optionsBattleStyle = (u8)atoi(sStep + 6);
     } else if (!strncmp(sStep, "trainer", 7)) {  /* trainer <id>: battle now */
@@ -341,6 +346,21 @@ static void TestSpecies(void)
 
 void PortTest_Frame(void)
 {
+    static int ioDumped;
+    if (!ioDumped && getenv("PKR_IO_DUMP") && Port_FrameCounter() >= (u32)atoi(getenv("PKR_IO_DUMP"))) {
+        ioDumped = 1;
+        extern u8 gHostIo[];
+        int r;
+        fprintf(stderr, "[io]");
+        for (r = 0; r < 0x56; r += 2)
+            fprintf(stderr, " %02x=%04x", r, gHostIo[r] | (gHostIo[r + 1] << 8));
+        fprintf(stderr, "\n");
+        if (getenv("PKR_PAL_DUMP")) {
+            extern u8 gHostPalram[];
+            for (r = 0; r < 512; r++)
+                fprintf(stderr, "%04x%c", gHostPalram[r * 2] | (gHostPalram[r * 2 + 1] << 8), (r & 15) == 15 ? '\n' : ' ');
+        }
+    }
     TestSpecies();
     TestPlan();
     {   /* PKR_STATE_SAVE=frame, PKR_STATE_LOAD=frame */

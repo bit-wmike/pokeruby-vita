@@ -2,11 +2,15 @@
 #ifdef PORT
 // Host / PS Vita port, wide view: how far beyond the GBA screen the
 // overworld is shown (port/port_view.c; 0 in the GBA view).
-extern int gPortViewExtraX, gPortViewExtraY;
-#define PORT_VIEW_EXTRA_PX_X gPortViewExtraX
-#define PORT_VIEW_EXTRA_PX_Y gPortViewExtraY
-#define PORT_VIEW_EXTRA_MT_X ((gPortViewExtraX + 15) / 16)
-#define PORT_VIEW_EXTRA_MT_Y ((gPortViewExtraY + 15) / 16)
+// Rooms (houses, gyms) are not shown around the GBA camera but placed in
+// the screen (centred or clamped), so up to twice as much shows on one side
+// (0.3: the gym leader popped in and out depending on where Mike stood).
+int PortViewObjectExtraX(void);
+int PortViewObjectExtraY(void);
+#define PORT_VIEW_EXTRA_PX_X PortViewObjectExtraX()
+#define PORT_VIEW_EXTRA_PX_Y PortViewObjectExtraY()
+#define PORT_VIEW_EXTRA_MT_X ((PortViewObjectExtraX() + 15) / 16)
+#define PORT_VIEW_EXTRA_MT_Y ((PortViewObjectExtraY() + 15) / 16)
 #else
 #define PORT_VIEW_EXTRA_PX_X 0
 #define PORT_VIEW_EXTRA_PX_Y 0

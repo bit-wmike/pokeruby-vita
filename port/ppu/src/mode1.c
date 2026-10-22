@@ -2224,7 +2224,14 @@ void virtuappu_mode1_composite_line(int line, uint32_t bg_layers[MODE1_GBA_BG_CO
 #undef MODE1_CONSIDER
         }
 
-        if (allow_sfx) {
+        /* A semi-transparent OBJ blends with a 2nd target below even where
+         * the window disables colour effects (mGBA: FLAG_TARGET_1 for mode-1
+         * OBJs regardless of the window). R/S set WININ 0x1F1F over the whole
+         * field, so fog and reflections need this (Rusturf Tunnel fog). */
+        if (!allow_sfx && top_layer == 4 && virtuappu_mode1_obj_semitrans[x] &&
+            mode1_is_second_target(bldcnt, bottom_layer)) {
+            top_color = mode1_alpha_blend(top_color, bottom_color, eva, evb);
+        } else if (allow_sfx) {
             if (top_layer == 4 && virtuappu_mode1_obj_semitrans[x]) {
                 /* Semi-transparent OBJ (attr0 mode 1): GBA forces it to be an
                  * alpha-blend 1st target regardless of BLDCNT's effect mode and
@@ -2775,11 +2782,17 @@ static inline __attribute__((always_inline)) uint32_t mode1_cc_resolve(const Mod
         bottom_code = 0u;
     }
 
+#define MODE1_CC_BOTTOM_COLOR() \
+    (bottom_code == 0xFFFFu ? obj_color : (bottom_code != 0u ? bg_lut[(bottom_code & 0x1FFu) - 1u] : cp->backdrop))
+    if (!allow_sfx && top_layer == 4u && virtuappu_mode1_obj_semitrans[x]) {   /* see the generic path */
+        const unsigned bottom_layer =
+            bottom_code == 0xFFFFu ? 4u : (bottom_code != 0u ? (bottom_code >> 9u) - 1u : 5u);
+        if (mode1_is_second_target(cp->bldcnt, (int)bottom_layer))
+            top_color = mode1_alpha_blend_lut(cp->blend_lut, top_color, MODE1_CC_BOTTOM_COLOR());
+    }
     if (allow_sfx) {
         const unsigned bottom_layer =
             bottom_code == 0xFFFFu ? 4u : (bottom_code != 0u ? (bottom_code >> 9u) - 1u : 5u);
-#define MODE1_CC_BOTTOM_COLOR() \
-    (bottom_code == 0xFFFFu ? obj_color : (bottom_code != 0u ? bg_lut[(bottom_code & 0x1FFu) - 1u] : cp->backdrop))
         if (top_layer == 4u && virtuappu_mode1_obj_semitrans[x]) {
             if (mode1_is_second_target(cp->bldcnt, (int)bottom_layer)) {
                 top_color = mode1_alpha_blend_lut(cp->blend_lut, top_color, MODE1_CC_BOTTOM_COLOR());

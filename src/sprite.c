@@ -388,6 +388,67 @@ static s16 PortSpriteFullY(struct Sprite *sprite)
 {
     return sprite->y + sprite->y2 + sprite->centerToCornerVecY + (sprite->coordOffsetEnabled ? gSpriteCoordOffsetY : 0);
 }
+
+/* Weather layers made of full-screen sprite grids (fog, heavy fog, ash)
+ * cover the GBA screen only: their sprites wrap with the 9/8-bit OAM
+ * coordinates. In the wide view they are taken as a seamless tiling (the
+ * grid repeats with its own size) and copied into the free OAM entries
+ * where the wider screen needs them (0.3: Rusturf Tunnel fog). */
+static void PortWideWeatherSprites(u8 *oamIndex)
+{
+    extern int gPortViewExtraX, gPortViewExtraY;
+    static const u16 sTags[] = {0x1201, 0x1202, 0x1203};
+    int n = *oamIndex, t, j;
+    if (gPortViewExtraX <= 0)
+        return;
+    for (t = 0; t < 3; t++) {
+        int minX = 10000, maxX = -10000, minY = 10000, maxY = -10000, w = 0, h = 0, px, py, any = 0;
+        for (j = 0; j < n; j++) {
+            int x, y;
+            if (gPortOamStagedTag[j] != sTags[t])
+                continue;
+            x = ((gPortOamStagedX[j] + 256) & 511) - 256;   /* as the GBA wraps */
+            y = ((gPortOamStagedY[j] + 128) & 255) - 128;
+            gPortOamStagedX[j] = (s16)x;
+            gPortOamStagedY[j] = (s16)y;
+            w = 8 << (gMain.oamBuffer[j].size + (gMain.oamBuffer[j].shape == 1));
+            h = 8 << (gMain.oamBuffer[j].size + (gMain.oamBuffer[j].shape == 2));
+            if (gMain.oamBuffer[j].shape == 0) w = h = 8 << gMain.oamBuffer[j].size;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+            any = 1;
+        }
+        if (!any)
+            continue;
+        px = maxX - minX + w;
+        py = maxY - minY + h;
+        for (j = 0; j < n; j++) {
+            int k, m;
+            if (gPortOamStagedTag[j] != sTags[t])
+                continue;
+            for (m = -1; m <= 1; m++)
+                for (k = -1; k <= 1; k++) {
+                    int x = gPortOamStagedX[j] + k * px, y = gPortOamStagedY[j] + m * py;
+                    if (k == 0 && m == 0)
+                        continue;
+                    if (x + w <= -gPortViewExtraX || x >= 240 + gPortViewExtraX ||
+                        y + h <= -gPortViewExtraY || y >= 160 + gPortViewExtraY)
+                        continue;
+                    if (*oamIndex >= gOamLimit)
+                        return;
+                    gMain.oamBuffer[*oamIndex] = gMain.oamBuffer[j];
+                    gMain.oamBuffer[*oamIndex].x = x & 0x1FF;
+                    gMain.oamBuffer[*oamIndex].y = y & 0xFF;
+                    gPortOamStagedX[*oamIndex] = (s16)x;
+                    gPortOamStagedY[*oamIndex] = (s16)y;
+                    gPortOamStagedTag[*oamIndex] = sTags[t];
+                    (*oamIndex)++;
+                }
+        }
+    }
+}
 #endif
 
 static void UpdateOamCoords(void)
@@ -542,6 +603,9 @@ static void AddSpritesToOamBuffer(void)
         i++;
     }
 
+#ifdef PORT
+    PortWideWeatherSprites(&oamIndex);
+#endif
     gMain.objCount = oamIndex;
 
     while (oamIndex < gOamLimit)
