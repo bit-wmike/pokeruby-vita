@@ -33,6 +33,9 @@ int virtuappu_mode1_bg_dx[4];
  * which the port makes larger than the GBA's 96 KiB) forcing a 64x64-tile
  * map, and per-BG clip rectangles (outside: transparent). */
 uint32_t virtuappu_mode1_bg_screen_override[4];
+const uint8_t *virtuappu_mode1_bg_alt_cells[4];
+uint32_t virtuappu_mode1_alt_char_base;
+uint16_t virtuappu_mode1_alt_bg_palette[256];
 int virtuappu_mode1_bg_clip_on[4];
 int virtuappu_mode1_bg_clip_x0[4], virtuappu_mode1_bg_clip_x1[4];
 int virtuappu_mode1_bg_clip_y0[4], virtuappu_mode1_bg_clip_y1[4];
@@ -626,9 +629,11 @@ uint32_t virtuappu_mode1_io_read32(uint16_t offset) {
  * with ZERO added branches. Built by PublishPaletteLuts before the parallel
  * scanline render; SHARED read-only during it (same contract as ws_shadow).
  * Byte-exact: LUT[i] == rgb555_to_abgr(palette[i]) by construction. */
-static uint32_t mode1_bg_abgr_lut[MODE1_PALETTE_COLORS];
+/* [256..511]: the port's alt palettes (a neighbour map's tileset) */
+static uint32_t mode1_bg_abgr_lut[MODE1_PALETTE_COLORS * 2];
 /* Token-indexed copy: [0] = backdrop (palette 0), [t] = mode1_bg_abgr_lut[t - 1]. */
-static uint32_t mode1_bg_abgr_lut1[MODE1_PALETTE_COLORS + 1];
+static uint32_t mode1_bg_abgr_lut1[MODE1_PALETTE_COLORS * 2 + 1];
+static uint16_t mode1_alt_palette_cache[256];
 static uint32_t mode1_obj_abgr_lut[MODE1_PALETTE_COLORS];
 static uint64_t mode1_bg_4bpp_pair_lut[16][256];
 static uint32_t mode1_bg_pair_palette_cache[MODE1_PALETTE_COLORS];
@@ -702,7 +707,7 @@ static void virtuappu_mode1_publish_palette_luts(void) {
             mode1_bg_abgr_lut[0] = virtuappu_mode1_backdrop_key;
         mode1_backdrop_key_last = virtuappu_mode1_backdrop_key;
         mode1_bg_abgr_lut1[0] = mode1_bg_abgr_lut[0];
-        memcpy(&mode1_bg_abgr_lut1[1], mode1_bg_abgr_lut, sizeof(mode1_bg_abgr_lut));
+        memcpy(&mode1_bg_abgr_lut1[1], mode1_bg_abgr_lut, MODE1_PALETTE_COLORS * sizeof(uint32_t));
         memcpy(mode1_bg_palette_source_cache, mode1_memory.bg_palette, sizeof(mode1_bg_palette_source_cache));
     }
     if (obj_changed) {
@@ -710,6 +715,13 @@ static void virtuappu_mode1_publish_palette_luts(void) {
             mode1_obj_abgr_lut[i] = virtuappu_mode1_rgb555_to_abgr8888(mode1_memory.obj_palette[i]);
         }
         memcpy(mode1_obj_palette_source_cache, mode1_memory.obj_palette, sizeof(mode1_obj_palette_source_cache));
+    }
+    if (correction_changed || memcmp(mode1_alt_palette_cache, virtuappu_mode1_alt_bg_palette, sizeof(mode1_alt_palette_cache)) != 0) {
+        for (int i = 0; i < 256; ++i) {
+            mode1_bg_abgr_lut[256 + i] = virtuappu_mode1_rgb555_to_abgr8888(virtuappu_mode1_alt_bg_palette[i]);
+            mode1_bg_abgr_lut1[257 + i] = mode1_bg_abgr_lut[256 + i];
+        }
+        memcpy(mode1_alt_palette_cache, virtuappu_mode1_alt_bg_palette, sizeof(mode1_alt_palette_cache));
     }
     mode1_palette_source_initialized = true;
     mode1_palette_source_color_correction = mode1_color_correction;
@@ -1132,7 +1144,13 @@ static void mode1_render_text_bg_native_tokens_range(int bg_index, int line, uin
             entry.raw = (uint16_t)mode1_memory.vram[map_addr] | ((uint16_t)mode1_memory.vram[map_addr + 1u] << 8u);
         }
         const int tile_pixel_y = mode1_tile_vflip(entry) ? 7 - pixel_y : pixel_y;
-        const uint32_t row_base = char_base + (uint32_t)mode1_tile_index(entry) * 32u + (uint32_t)tile_pixel_y * 4u;
+        const bool alt = !use_shadow && virtuappu_mode1_bg_alt_cells[bg_index] != NULL &&
+                         virtuappu_mode1_bg_alt_cells[bg_index][(map_addr - screen_base) >> 1];
+        const unsigned tile_index = mode1_tile_index(entry);
+        const uint32_t row_base = (alt && tile_index >= 512u
+                                       ? virtuappu_mode1_alt_char_base + (uint32_t)(tile_index - 512u) * 32u
+                                       : char_base + (uint32_t)tile_index * 32u) +
+                                  (uint32_t)tile_pixel_y * 4u;
 
         if (row_base + 3u < MODE1_VRAM_SIZE) {
             const uint32_t packed_row = mode1_read_tile_row_4bpp(mode1_memory.vram + row_base);
@@ -1141,7 +1159,7 @@ static void mode1_render_text_bg_native_tokens_range(int bg_index, int line, uin
                 continue;
             }
 
-            const unsigned palette_bank = mode1_tile_palette(entry);
+            const unsigned palette_bank = mode1_tile_palette(entry) + (alt && mode1_tile_palette(entry) >= 6u ? 16u : 0u);
             const bool hflip = mode1_tile_hflip(entry);
             if (run == 8) {
                 /* Whole tile: two pixels per lookup. Shadow rows drop the

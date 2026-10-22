@@ -856,13 +856,26 @@ void LoadMapTilesetPalettes(const struct MapLayout *mapLayout)
 // metatiles of them). Elsewhere it is the border, as in MapGridGetMetatileIdAt.
 // The whole block (metatile id, collision, elevation) at backup-layout
 // coordinates (x, y), also beyond the backup layout in the connected maps.
+// Also which map's layout the block is from (its tilesets).
+u16 PortMapGetBlockWideL(int x, int y, const struct MapLayout **from);
+
 u16 PortMapGetBlockWide(int x, int y)
+{
+    const struct MapLayout *l;
+    return PortMapGetBlockWideL(x, y, &l);
+}
+
+u16 PortMapGetBlockWideL(int x, int y, const struct MapLayout **from)
 {
     const struct MapLayout *layout = gMapHeader.mapLayout;
     int mx = x - MAP_OFFSET, my = y - MAP_OFFSET;
     int i;
 
-    if (AreCoordsWithinMapGridBounds(x, y) || gMapHeader.connections == NULL)
+    *from = layout;
+    /* inside the map itself, or no neighbours: the game's own data (the
+     * margin of the backup layout holds copies of the neighbours' blocks,
+     * so outside the map the neighbours are looked up below) */
+    if ((mx >= 0 && mx < layout->width && my >= 0 && my < layout->height) || gMapHeader.connections == NULL)
         return GetMapGridBlockAt(x, y);
     for (i = 0; i < gMapHeader.connections->count; i++)
     {
@@ -882,7 +895,10 @@ u16 PortMapGetBlockWide(int x, int y)
         default: continue;
         }
         if (nx >= 0 && nx < l->width && ny >= 0 && ny < l->height)
+        {
+            *from = l;
             return l->map[nx + ny * l->width];
+        }
     }
     return GetMapGridBlockAt(x, y);
 }
@@ -895,20 +911,31 @@ u32 PortMapGetMetatileIdWide(int x, int y)
 // The tilemap entries of the metatile at (x, y) for BG1, BG2 and BG3, laid out
 // like DrawMetatile in field_camera.c does (top-left, top-right, bottom-left,
 // bottom-right).
-void PortMetatileTilesWide(int x, int y, u16 *bg1, u16 *bg2, u16 *bg3)
+// Returns the layout whose tilesets the metatile is drawn with: a
+// connected map with another secondary tileset (but the same primary one)
+// needs its own (Mike, 0.3.10: Petalburg's hedges as roofs on Route 104).
+const struct MapLayout *PortMetatileTilesWide(int x, int y, u16 *bg1, u16 *bg2, u16 *bg3)
 {
-    const struct MapLayout *layout = gMapHeader.mapLayout;
-    u16 id = PortMapGetMetatileIdWide(x, y);
+    const struct MapLayout *layout = gMapHeader.mapLayout, *from;
+    u16 b = PortMapGetBlockWideL(x, y, &from);
+    u16 id = b == MAPGRID_UNDEFINED ? (GetBorderBlockAt(x, y) & MAPGRID_METATILE_ID_MASK) : (b & MAPGRID_METATILE_ID_MASK);
     const u16 *m;
     int i, type;
 
+    if (from->primaryTileset != layout->primaryTileset || b == MAPGRID_UNDEFINED)
+        from = layout;   /* only the secondary tileset can be swapped */
     if (id > NUM_METATILES_TOTAL)
         id = 0;
-    type = (GetMetatileAttributesById(id) & METATILE_ATTR_LAYER_MASK) >> METATILE_ATTR_LAYER_SHIFT;
     if (id < NUM_METATILES_IN_PRIMARY)
-        m = layout->primaryTileset->metatiles + id * 8;
+    {
+        m = from->primaryTileset->metatiles + id * 8;
+        type = (from->primaryTileset->metatileAttributes[id] & METATILE_ATTR_LAYER_MASK) >> METATILE_ATTR_LAYER_SHIFT;
+    }
     else
-        m = layout->secondaryTileset->metatiles + (id - NUM_METATILES_IN_PRIMARY) * 8;
+    {
+        m = from->secondaryTileset->metatiles + (id - NUM_METATILES_IN_PRIMARY) * 8;
+        type = (from->secondaryTileset->metatileAttributes[id - NUM_METATILES_IN_PRIMARY] & METATILE_ATTR_LAYER_MASK) >> METATILE_ATTR_LAYER_SHIFT;
+    }
     for (i = 0; i < 4; i++)
     {
         switch (type)
@@ -918,5 +945,6 @@ void PortMetatileTilesWide(int x, int y, u16 *bg1, u16 *bg2, u16 *bg3)
         default: bg3[i] = 0x3014; bg2[i] = m[i];   bg1[i] = m[4 + i]; break;
         }
     }
+    return from;
 }
 #endif

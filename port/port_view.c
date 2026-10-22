@@ -17,11 +17,13 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "global.h"
 #include "field_camera.h"
 #include "main.h"
 #include "fieldmap.h"
 #include "constants/map_types.h"
+#include "palette.h"
 
 #include "port/port.h"
 #include "port/port_config.h"
@@ -31,7 +33,8 @@
 int gPortViewExtraX, gPortViewExtraY;
 
 extern s16 gPortOamX[128], gPortOamY[128];
-void PortMetatileTilesWide(int x, int y, u16 *bg1, u16 *bg2, u16 *bg3);
+const struct MapLayout *PortMetatileTilesWide(int x, int y, u16 *bg1, u16 *bg2, u16 *bg3);
+void LZ77UnCompWram(const void *src, void *dest);
 void PortFieldCameraTileOffset(u8 *xTile, u8 *yTile);
 int PortIsOverworld(void);
 
@@ -113,6 +116,56 @@ static inline u16 *WideEntry(int bg, int tx, int ty)
     return (u16 *)(gHostVram + EXT_BASE + (u32)(bg - 1) * 0x2000u + sb * 0x800u) + ((ty & 31) * 32 + (tx & 31));
 }
 
+/* A connected map with its own secondary tileset (Petalburg's hedges seen
+ * from Route 104): its tiles 512+ at ALT_BASE, its palettes 6-12 as the
+ * PPU's alt palettes, coloured like the game's palettes are now (fades,
+ * weather): per colour channel the line that maps the game's unfaded
+ * palettes onto the shown ones (Mike, 0.3.10). */
+#define ALT_BASE 0x1E000u
+static u8 sAltCells[4096];
+static const struct Tileset *sAltSet;
+
+static void LoadAltTiles(const struct Tileset *t)
+{
+    static u8 buf[0x8000];
+    if (t->isCompressed)
+        LZ77UnCompWram(t->tiles, buf);
+    else
+        memcpy(buf, t->tiles, 0x4000);
+    memcpy(gHostVram + ALT_BASE, buf, 0x4000);
+    sAltSet = t;
+}
+
+static void AltPalettes(void)
+{
+    double sx[3] = {0}, sy[3] = {0}, sxx[3] = {0}, sxy[3] = {0}, k[3], o[3];
+    int n = 0, i, c, ch;
+    for (i = 16; i < 13 * 16; i++) {
+        u16 u = gPlttBufferUnfaded[i], f = (u16)(gHostPalram[i * 2] | (gHostPalram[i * 2 + 1] << 8));
+        if ((i & 15) == 0)
+            continue;
+        for (ch = 0; ch < 3; ch++) {
+            double a = (u >> (ch * 5)) & 31, b = (f >> (ch * 5)) & 31;
+            sx[ch] += a; sy[ch] += b; sxx[ch] += a * a; sxy[ch] += a * b;
+        }
+        n++;
+    }
+    for (ch = 0; ch < 3; ch++) {
+        double d = n * sxx[ch] - sx[ch] * sx[ch];
+        k[ch] = d > 1e-6 ? (n * sxy[ch] - sx[ch] * sy[ch]) / d : 1.0;
+        o[ch] = (sy[ch] - k[ch] * sx[ch]) / n;
+    }
+    for (i = 6; i <= 12; i++)
+        for (c = 0; c < 16; c++) {
+            u16 r = sAltSet->palettes[i][c], v = 0;
+            for (ch = 0; ch < 3; ch++) {
+                int x = (int)(k[ch] * ((r >> (ch * 5)) & 31) + o[ch] + 0.5);
+                v |= (u16)((x < 0 ? 0 : x > 31 ? 31 : x) << (ch * 5));
+            }
+            virtuappu_mode1_alt_bg_palette[i * 16 + c] = v;
+        }
+}
+
 static void FillWorld(void)
 {
     const int left = sSnap.fx, top = sSnap.fy;
@@ -130,8 +183,11 @@ static void FillWorld(void)
     const int curMap = gSaveBlock1.location.mapGroup * 256 + gSaveBlock1.location.mapNum;
     const int shiftX = curMap != sSnap.map ? -gCamera.x : 0, shiftY = curMap != sSnap.map ? -gCamera.y : 0;
 
+    const struct Tileset *altSet = NULL;
+
     for (b = 1; b <= 3; b++)
         game[b] = (const u16 *)(gHostVram + ((IoRead(0x008 + b * 2) >> 8) & 0x1F) * 0x800u);
+    memset(sAltCells, 0, sizeof(sAltCells));
 
     for (my = my0; my <= my1; my++) {
         for (mx = mx0; mx <= mx1; mx++) {
@@ -141,7 +197,12 @@ static void FillWorld(void)
             /* shown by the GBA too: take the game's own tilemap */
             const int onGba = mx * 16 + 16 > sSnap.wx && mx * 16 < sSnap.wx + PORT_GBA_W &&
                               my * 16 + 16 > sSnap.wy && my * 16 < sSnap.wy + PORT_GBA_H &&
-                              dx >= 0 && dx < 16 && dy >= 0 && dy < 16;
+                              dx >= 0 && dx < 16 && dy >= 0 && dy < 16 &&
+                              /* the GBA draws the neighbours' blocks with this map's
+                               * tilesets (an orange roof edge on Route 104 at Petalburg,
+                               * on the GBA too) - beyond the map: the map data */
+                              mx + shiftX >= MAP_OFFSET && mx + shiftX < MAP_OFFSET + gMapHeader.mapLayout->width &&
+                              my + shiftY >= MAP_OFFSET && my + shiftY < MAP_OFFSET + gMapHeader.mapLayout->height;
             if (onGba) {
                 const int gx = (sSnap.xTile + dx * 2) & 31, gy = (sSnap.yTile + dy * 2) & 31;
                 for (b = 1; b <= 3; b++) {
@@ -151,7 +212,13 @@ static void FillWorld(void)
                     t[b][3] = game[b][((gy + 1) & 31) * 32 + ((gx + 1) & 31)];
                 }
             } else {
-                PortMetatileTilesWide(mx + shiftX, my + shiftY, t[1], t[2], t[3]);
+                const struct MapLayout *from = PortMetatileTilesWide(mx + shiftX, my + shiftY, t[1], t[2], t[3]);
+                const struct Tileset *sec = from->secondaryTileset;
+                if (sec != gMapHeader.mapLayout->secondaryTileset && sec != NULL && (altSet == NULL || altSet == sec)) {
+                    u32 i0 = (u32)(((tx >> 5) & 1) + ((ty >> 5) & 1) * 2) * 1024u + (u32)((ty & 31) * 32 + (tx & 31));
+                    altSet = sec;
+                    sAltCells[i0] = sAltCells[i0 + 1] = sAltCells[i0 + 32] = sAltCells[i0 + 33] = 1;
+                }
             }
             for (b = 1; b <= 3; b++) {
                 *WideEntry(b, tx, ty) = t[b][0];
@@ -161,7 +228,14 @@ static void FillWorld(void)
             }
         }
     }
+    if (altSet) {
+        if (altSet != sAltSet)
+            LoadAltTiles(altSet);
+        AltPalettes();
+        virtuappu_mode1_alt_char_base = ALT_BASE;
+    }
     for (b = 1; b <= 3; b++) {
+        virtuappu_mode1_bg_alt_cells[b] = altSet ? sAltCells : NULL;
         virtuappu_mode1_bg_screen_override[b] = EXT_BASE + (u32)(b - 1) * 0x2000u;
         virtuappu_mode1_bg_dx[b] = (left - IoRead(0x010 + b * 4)) & 511;
         virtuappu_mode1_bg_dy[b] = (top - IoRead(0x012 + b * 4)) & 511;
@@ -172,6 +246,7 @@ static void Reset(void)
 {
     int b, i;
     for (b = 0; b < 4; b++) {
+        virtuappu_mode1_bg_alt_cells[b] = NULL;
         virtuappu_mode1_bg_screen_override[b] = 0;
         virtuappu_mode1_bg_clip_on[b] = 0;
         virtuappu_mode1_bg_dx[b] = 0;
@@ -360,6 +435,7 @@ int PortView_SpriteInWindow(int i)
 /* after loading a savestate (nothing kept between frames yet) */
 void PortView_Reset(void)
 {
+    sAltSet = NULL;   /* the alt tiles in VRAM came with the savestate */
 }
 
 int PortView_BeginFrame(void)

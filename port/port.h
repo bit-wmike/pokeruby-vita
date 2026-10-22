@@ -22,7 +22,7 @@ extern unsigned char gHostEwram[0x40000];
 extern unsigned char gHostIwram[0x8000];
 extern unsigned char gHostIo[0x400];
 extern unsigned char gHostPalram[0x400];
-extern unsigned char gHostVram[0x1E000];
+extern unsigned char gHostVram[0x22000];
 extern unsigned char gHostOam[0x400];
 extern unsigned char gHostFlash[0x20000];
 

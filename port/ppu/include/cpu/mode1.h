@@ -54,6 +54,13 @@ extern int virtuappu_mode1_bg_region_count[4];
 /* Pokémon port: per-BG screen map override (VRAM offset, 64x64 tiles) and
  * clip rectangles (pixels outside are transparent for that BG). */
 extern uint32_t virtuappu_mode1_bg_screen_override[4];
+/* Pokémon port: cells of an override map (one byte per map entry, same
+ * index) that belong to a connected map with its own secondary tileset:
+ * their tiles 512+ come from alt_char_base, their palettes 6+ are the
+ * alt palettes (palette banks 22..28 = 16 + 6..12). NULL = none. */
+extern const uint8_t *virtuappu_mode1_bg_alt_cells[4];
+extern uint32_t virtuappu_mode1_alt_char_base;
+extern uint16_t virtuappu_mode1_alt_bg_palette[256];
 extern int virtuappu_mode1_bg_clip_on[4];
 extern int virtuappu_mode1_bg_clip_x0[4], virtuappu_mode1_bg_clip_x1[4];
 extern int virtuappu_mode1_bg_clip_y0[4], virtuappu_mode1_bg_clip_y1[4];
@@ -101,7 +108,7 @@ enum {
     MODE1_GBA_BG_COUNT = 4,
     MODE1_GBA_OAM_COUNT = 128,
     MODE1_IO_MEM_SIZE = 0x400,
-    MODE1_VRAM_SIZE = 0x1E000, /* Pokémon port: + wide-view maps */
+    MODE1_VRAM_SIZE = 0x22000, /* Pokémon port: + wide-view maps, a neighbour map's tiles */
     MODE1_PALETTE_COLORS = 256,
     MODE1_OAM_HALFWORDS = 512
 };
