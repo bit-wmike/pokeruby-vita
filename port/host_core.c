@@ -258,6 +258,11 @@ static void RenderFrame(void)
     /* full screen view: the wide scenes at 2x, the GBA-sized ones (intro,
      * menus) zoomed to 3x */
     zoom = gPortConfig.viewMode != PORT_VIEW_FULL ? PORT_GBA_H : wide ? PORT_WIDE_H : 181;
+    /* in the game (bag, party, Pokedex, ... over the paused scene): pixel
+     * exact like the field and its windows, not enlarged (Mike, 0.3.8);
+     * title and intro stay 3x */
+    if (zoom == 181 && sBackdropOn)
+        zoom = PORT_WIDE_H;
 
     if (!bound) {
         VirtuaPPUMode1GbaMemory mem = {

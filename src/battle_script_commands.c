@@ -3396,6 +3396,12 @@ static void atk23_getexp(void)
                     *exp = 1;
                 gExpShareExp = 0;
             }
+#ifdef PORT
+            // port cheat: with the EXP bonus on, every Pokemon that fought gets
+            // its full share, not a part of it (Mike, 0.3.8: double battles)
+            if (PortExpMultiplier() > 1 && viaSentIn > 1)
+                *exp *= viaSentIn;
+#endif
 
             gBattleStruct->getexpStateTracker++;
             gBattleStruct->expGetterMonId = 0;
