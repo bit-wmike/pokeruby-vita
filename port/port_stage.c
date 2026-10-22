@@ -300,11 +300,12 @@ static void Build(void)
     memcpy(sBaseImg, Meta(sBase, 0), sizeof(sBaseImg));
 
     /* the camera behind the player, looking where the player looks */
+    /* never south: the ground's tiles would stand on their heads (Mike,
+     * 0.2.10) - looking south the camera looks north instead */
     switch (pl->facingDirection) {
-    case DIR_NORTH: sFx = 0; sFy = -1; break;
     case DIR_WEST: sFx = -1; sFy = 0; break;
     case DIR_EAST: sFx = 1; sFy = 0; break;
-    default: sFx = 0; sFy = 1; break;
+    default: sFx = 0; sFy = -1; break;
     }
     sRx = -sFy; sRy = sFx;
     sCamX = px * 16 + 8 - sFx * 24;
