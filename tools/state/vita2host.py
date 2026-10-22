@@ -44,6 +44,11 @@ def main():
     magic, ver = d[:8], d[8:32]
     nb, total = struct.unpack('<II', d[32:40]); sizes = struct.unpack('<16I', d[40:104])[:nb]
     stack = struct.unpack('<I', d[104:108])[0]
+    if stack == 0:   # written by the hang watchdog: no stack anchor; take
+        # the one of a state saved in the same session (--stack-from file)
+        stack = 0xFFE00000
+        if '--stack-from' in sys.argv:
+            stack = struct.unpack('<I', open(sys.argv[sys.argv.index('--stack-from') + 1], 'rb').read()[104:108])[0]
     off = 108; blocks = []
     for s in sizes:
         blocks.append(bytearray(d[off:off + s])); off += s

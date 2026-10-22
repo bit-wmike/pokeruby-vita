@@ -72,7 +72,7 @@ void Platform_Log(const char *fmt, ...)
 
 /* -------------------------------------------------------------- video */
 
-volatile int gVitaPhase;   /* hang watchdog: 1 game, 2 GPU wait, 3 upload/draw, 4 swap */
+volatile int gVitaPhase;   /* hang watchdog: 1 game, 2 GPU wait, 3 upload/draw, 5 end drawing, 6 pacing, 4 swap */
 static vita2d_texture *sTex;
 /* battle layers (Platform_PresentBattle) */
 static vita2d_texture *sStageTex, *sFieldTex, *sUiTex, *sHudTex;
@@ -202,8 +202,21 @@ static void WaitDue(void)
         Reanchor();
         return;
     }
-    while (FrameLate() < 0)
-        sceDisplayWaitVblankStart();
+    {   /* at most a few vblanks: far ahead of the schedule means it is broken
+         * (0.2.9 hang: stuck in this phase) - start a new one instead */
+        int n = 0;
+        while (FrameLate() < 0 && n++ < 4)
+            sceDisplayWaitVblankStart();
+        if (FrameLate() < 0)
+            Reanchor();
+    }
+}
+
+/* for the hang watchdog */
+void Platform_DescribePacing(void)
+{
+    Platform_Log("[hang] vcount %u, anchor vcount %u frame %u, late %d, turbo %d\n", sceDisplayGetVcount(),
+                 sAnchorVcount, sAnchorFrame, FrameLate(), sTurbo);
 }
 
 int PortIsTitleScreen(void);
@@ -305,7 +318,9 @@ void Platform_Present(const uint32_t *pixels, int width, int height, int pitch, 
 
     vita2d_pool_reset();
     DrawGame();
+    gVitaPhase = 5;
     vita2d_end_drawing();
+    gVitaPhase = 6;
     WaitDue();
     gVitaPhase = 4;
     vita2d_swap_buffers();
@@ -334,7 +349,9 @@ void Platform_PresentBattle(const PortBattleFrame *f)
 
     vita2d_pool_reset();
     DrawGame();
+    gVitaPhase = 5;
     vita2d_end_drawing();
+    gVitaPhase = 6;
     WaitDue();
     gVitaPhase = 4;
     vita2d_swap_buffers();
@@ -373,6 +390,10 @@ static int WatchdogThread(SceSize args, void *argp)
             void Port_DescribeHang(void);
             Platform_Log("[hang] no frame for 5 s at frame %u, phase %d, main=%p\n", f, gVitaPhase, (void *)&main);
             Port_DescribeHang();
+            {
+                void Platform_DescribePacing(void);
+                Platform_DescribePacing();
+            }
             Platform_Log("[hang] state %s\n", Port_StateDumpTo("haenger_zustand.bin") ? "written" : "failed");
         }
     }
@@ -477,6 +498,7 @@ static int IsHeader(int item)
 }
 
 static char sMenuNote[96];
+static int sConfirm = -1;   /* save/load state: asked once more (X yes, O no) */
 
 static void MenuLine(int item, char *buf, size_t size)
 {
@@ -508,8 +530,9 @@ static void MenuLine(int item, char *buf, size_t size)
         case MI_RUN: snprintf(buf, size, "Rennen in Gebaeuden: %s", onoff[gPortCheats.runIndoors]); break;
         case MI_H_STATE: snprintf(buf, size, "SCHNELLSPEICHERN"); break;
         case MI_H_KEYS: snprintf(buf, size, "TASTEN (nur im Spiel)"); break;
-        case MI_SAVE: snprintf(buf, size, "Zustand speichern"); break;
-        case MI_LOAD: snprintf(buf, size, "Zustand laden%s", Port_StateExists() ? "" : " (keiner da)"); break;
+        case MI_SAVE: snprintf(buf, size, sConfirm == MI_SAVE ? "Wirklich speichern? X: Ja  O: Nein" : "Zustand speichern"); break;
+        case MI_LOAD: snprintf(buf, size, sConfirm == MI_LOAD ? "Wirklich laden? X: Ja  O: Nein" :
+                                          Port_StateExists() ? "Zustand laden" : "Zustand laden (keiner da)"); break;
         default: snprintf(buf, size, "Zurueck zum Spiel"); break;
     }
 }
@@ -563,6 +586,11 @@ static int MenuChange(int item, int d)
         case MI_RUN: gPortCheats.runIndoors ^= 1; break;
         case MI_SAVE:
             if (d == 0) {
+                if (sConfirm != MI_SAVE) {   /* ask first (Mike pressed X for O once) */
+                    sConfirm = MI_SAVE;
+                    break;
+                }
+                sConfirm = -1;
                 Port_StateRequest(0);
                 return 1;
             }
@@ -573,6 +601,11 @@ static int MenuChange(int item, int d)
                     snprintf(sMenuNote, sizeof(sMenuNote), "Kein Zustand dieser Version gespeichert");
                     break;
                 }
+                if (sConfirm != MI_LOAD) {
+                    sConfirm = MI_LOAD;
+                    break;
+                }
+                sConfirm = -1;
                 Port_StateRequest(1);
                 return 1;
             }
@@ -594,6 +627,7 @@ static void RunMenu(void)
     Platform_Log("[ui] menu open\n");
     sMenuOpen = 1;
     sMenuNote[0] = 0;
+    sConfirm = -1;
     for (;;) {
         SceCtrlData pad;
         unsigned pressed;
@@ -611,7 +645,11 @@ static void RunMenu(void)
         if (pressed & SCE_CTRL_LEFT) close = MenuChange(sel, -1);
         if (pressed & SCE_CTRL_RIGHT) close = MenuChange(sel, 1);
         if (pressed & SCE_CTRL_CROSS) close = MenuChange(sel, 0) || close;
-        if (pressed & (SCE_CTRL_CIRCLE | SCE_CTRL_START))
+        if (pressed & (SCE_CTRL_UP | SCE_CTRL_DOWN | SCE_CTRL_LEFT | SCE_CTRL_RIGHT))
+            sConfirm = -1;
+        if ((pressed & SCE_CTRL_CIRCLE) && sConfirm >= 0)
+            sConfirm = -1;   /* "Nein": stay in the menu */
+        else if (pressed & (SCE_CTRL_CIRCLE | SCE_CTRL_START))
             close = 1;
 
         vita2d_pool_reset();

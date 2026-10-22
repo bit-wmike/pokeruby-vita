@@ -366,6 +366,18 @@ s16 gPortOamStagedX[128], gPortOamStagedY[128];
 s16 gPortOamX[128], gPortOamY[128];
 // the sprite's tile tag per OAM entry (battle stage: finds the healthboxes)
 u16 gPortOamStagedTag[128], gPortOamTag[128];
+/* the tile tag of each sprite, taken at its creation: some templates live on
+ * the stack (object events: people, berry trees), so sprite->template may
+ * point at long reused memory later (0.3: people vanished behind windows) */
+static u16 sPortSpriteTag[MAX_SPRITES + 1];
+static const struct SpriteTemplate *sPortSpriteTpl[MAX_SPRITES + 1];
+static u16 PortSpriteTag(const struct Sprite *sprite)
+{
+    int i = (int)(sprite - gSprites);
+    if (i >= 0 && i <= MAX_SPRITES && sPortSpriteTpl[i] == sprite->template)
+        return sPortSpriteTag[i];
+    return sprite->template ? sprite->template->tileTag : 0;   /* a copied sprite */
+}
 
 static s16 PortSpriteFullX(struct Sprite *sprite)
 {
@@ -599,6 +611,15 @@ static u8 CreateSpriteAt(u8 index, const struct SpriteTemplate *template, s16 x,
     sprite->anims = template->anims;
     sprite->affineAnims = template->affineAnims;
     sprite->template = template;
+#ifdef PORT
+    {
+        int i = (int)(sprite - gSprites);
+        if (i >= 0 && i <= MAX_SPRITES) {
+            sPortSpriteTpl[i] = template;
+            sPortSpriteTag[i] = template->tileTag;
+        }
+    }
+#endif
     sprite->callback = template->callback;
     sprite->x = x;
     sprite->y = y;
@@ -1759,7 +1780,7 @@ bool8 AddSpriteToOamBuffer(struct Sprite *sprite, u8 *oamIndex)
 #ifdef PORT
         gPortOamStagedX[*oamIndex] = PortSpriteFullX(sprite);
         gPortOamStagedY[*oamIndex] = PortSpriteFullY(sprite);
-        gPortOamStagedTag[*oamIndex] = sprite->template ? sprite->template->tileTag : 0;
+        gPortOamStagedTag[*oamIndex] = PortSpriteTag(sprite);
 #endif
         (*oamIndex)++;
         return 0;
@@ -1787,7 +1808,7 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
 #ifdef PORT
         gPortOamStagedX[*oamIndex] = PortSpriteFullX(sprite);
         gPortOamStagedY[*oamIndex] = PortSpriteFullY(sprite);
-        gPortOamStagedTag[*oamIndex] = sprite->template ? sprite->template->tileTag : 0;
+        gPortOamStagedTag[*oamIndex] = PortSpriteTag(sprite);
 #endif
         (*oamIndex)++;
         return 0;
@@ -1846,7 +1867,7 @@ bool8 AddSubspritesToOamBuffer(struct Sprite *sprite, struct OamData *destOam, u
 #ifdef PORT
             gPortOamStagedX[*oamIndex] = PortSpriteFullX(sprite) - sprite->centerToCornerVecX + (s16)x;
             gPortOamStagedY[*oamIndex] = PortSpriteFullY(sprite) - sprite->centerToCornerVecY + (s16)y;
-            gPortOamStagedTag[*oamIndex] = sprite->template ? sprite->template->tileTag : 0;
+            gPortOamStagedTag[*oamIndex] = PortSpriteTag(sprite);
 #endif
             destOam[i].tileNum = tileNum + subspriteTable->subsprites[i].tileOffset;
 
