@@ -1,6 +1,10 @@
 #include "global.h"
 #include "debug.h"
 #include "sprite.h"
+#ifdef PORT
+#include "constants/battle_anim.h"
+#include "port/port_config.h"
+#endif
 #include "main.h"
 #include "menu_cursor.h"
 #include "palette.h"
@@ -399,6 +403,32 @@ static void PortWideWeatherSprites(u8 *oamIndex)
     extern int gPortViewExtraX, gPortViewExtraY;
     static const u16 sTags[] = {0x1201, 0x1202, 0x1203};
     int n = *oamIndex, t, j;
+    if (gMain.inBattle && gPortConfig.viewMode == PORT_VIEW_FULL) {
+        /* battle (wide stage, GBA x -40..280): rain and hail of Rain Dance
+         * and Hail across the whole width, one GBA screen to each side */
+        static const u16 sBattleTags[] = {ANIM_TAG_RAIN_DROPS, ANIM_TAG_HAIL};
+        for (j = 0; j < n; j++) {
+            int k, w, x;
+            if (gPortOamStagedTag[j] != sBattleTags[0] && gPortOamStagedTag[j] != sBattleTags[1])
+                continue;
+            w = gMain.oamBuffer[j].shape == 0 ? 8 << gMain.oamBuffer[j].size
+                                              : 8 << (gMain.oamBuffer[j].size + (gMain.oamBuffer[j].shape == 1));
+            for (k = -1; k <= 1; k += 2) {
+                x = gPortOamStagedX[j] + k * 240;
+                if (x + w <= -40 || x >= 280)
+                    continue;
+                if (*oamIndex >= gOamLimit)
+                    return;
+                gMain.oamBuffer[*oamIndex] = gMain.oamBuffer[j];
+                gMain.oamBuffer[*oamIndex].x = x & 0x1FF;
+                gPortOamStagedX[*oamIndex] = (s16)x;
+                gPortOamStagedY[*oamIndex] = gPortOamStagedY[j];
+                gPortOamStagedTag[*oamIndex] = gPortOamStagedTag[j];
+                (*oamIndex)++;
+            }
+        }
+        return;
+    }
     if (gPortViewExtraX <= 0)
         return;
     for (t = 0; t < 3; t++) {

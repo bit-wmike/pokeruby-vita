@@ -1918,9 +1918,19 @@ bool8 IsAnimBankSpriteVisible(u8 bank)
     return FALSE;
 }
 
+#ifdef PORT
+/* port, wide battle: a move's background (fadetobg) is up; a battler's
+ * picture is on BG1 / BG2 (those stay GBA sized) */
+int gPortAnimBg;
+int gPortBgMon[2];
+#endif
+
 void MoveBattlerSpriteToBG(u8 bank, u8 toBG_2)
 {
     u8 spriteId;
+#ifdef PORT
+    gPortBgMon[toBG_2 ? 1 : 0] = 1;
+#endif
 
     if (toBG_2 == 0)
     {
@@ -2046,6 +2056,9 @@ void sub_8076464(u8 a)
     struct Struct_sub_8078914 s;
 
     sub_8078914(&s);
+#ifdef PORT
+    gPortBgMon[a ? 1 : 0] = 0;
+#endif
     if (a == 0 || IsContest())
     {
         DmaFill32Large(3, 0, s.field_0, 0x2000, 0x1000);
@@ -2465,6 +2478,9 @@ static void LoadMoveBg(u16 bgId)
     }
     else
     {
+#ifdef PORT
+        gPortAnimBg = 1;
+#endif
         LZDecompressVram(gBattleAnimBackgroundTable[bgId].tilemap, (void *)(VRAM + 0xD000));
         LZDecompressVram(gBattleAnimBackgroundTable[bgId].image, (void *)(VRAM + 0x8000));
         LoadCompressedPalette(gBattleAnimBackgroundTable[bgId].palette, 32, 32);
@@ -2473,6 +2489,9 @@ static void LoadMoveBg(u16 bgId)
 
 static void LoadDefaultBg(void)
 {
+#ifdef PORT
+    gPortAnimBg = 0;
+#endif
     if (IsContest())
         LoadContestBgAfterMoveAnim();
     else

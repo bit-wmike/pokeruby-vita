@@ -22,12 +22,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "global.h"
 #include "main.h"
 #include "fieldmap.h"
 #include "palette.h"
 #include "field_weather.h"
+#include "metatile_behavior.h"
 #include "constants/map_types.h"
 #include "constants/weather.h"
 
@@ -64,6 +66,7 @@ static u32 sKey = 0x00FF00FFu;
 extern s16 gPortOamX[128], gPortOamY[128];
 extern u16 gPortOamTag[128];
 u16 PortMapGetBlockWide(int x, int y);
+extern int gPortAnimBg, gPortBgMon[2];   /* src/battle_anim.c */
 void LZ77UnCompWram(const void *src, void *dest);
 
 static u32 sStage[H][W];
@@ -144,9 +147,12 @@ static const u32 *Meta(u16 id, int kind)
     return img;
 }
 
+static u16 sTopPix[1024];   /* top layer pixels + 1, 0 = not counted */
+
 static void FreeMeta(void)
 {
     int i;
+    memset(sTopPix, 0, sizeof(sTopPix));
     for (i = 0; i < 1024; i++) {
         free(sMeta[i][0]); free(sMeta[i][1]);
         sMeta[i][0] = sMeta[i][1] = NULL;
@@ -156,6 +162,109 @@ static void FreeMeta(void)
 static int Solid(u16 block)
 {
     return (block & MAPGRID_COLLISION_MASK) != 0;
+}
+
+/* pixels of the metatile's top layer (0..256) */
+static int TopPixels(u16 id)
+{
+    u16 *cache = sTopPix;
+    int i, x, y, n = 0;
+    if (id >= 1024)
+        return 0;
+    if (cache[id])
+        return cache[id] - 1;
+    for (i = 0; i < 4; i++) {
+        u16 e = MetatileEntries(id)[4 + i];
+        int tid = e & 0x3FF;
+        const u8 *t = tid < 512 ? sTiles[0] + tid * 32 : sTiles[1] + (tid - 512) * 32;
+        for (y = 0; y < 8; y++)
+            for (x = 0; x < 8; x++) {
+                u8 b = t[y * 4 + x / 2];
+                n += ((x & 1) ? b >> 4 : b & 15) != 0;
+            }
+    }
+    cache[id] = (u16)(n + 1);
+    return n;
+}
+
+/* What a block is on the stage (Mike, 0.3.3): only things that stand up
+ * (trees, bushes, houses, signs, fences, rocks) become upright cards; ledges,
+ * banks and edges stay flat on the ground with their own picture; in caves
+ * and rooms the solid mass around becomes a rock wall. */
+static float sCamX, sCamY, sFx, sFy, sRx, sRy; /* camera, forward, right */
+
+enum { K_GROUND, K_FLAT, K_CARD, K_WALL };
+#define KR 64
+static u8 sKind[KR * 2][KR * 2];
+static int sKx, sKy, sDark;
+
+static int Behavior(u16 b)
+{
+    return GetMetatileAttributesById(b & MAPGRID_METATILE_ID_MASK) & 0xFF;
+}
+
+static int IsWaterB(u16 b)
+{
+    return b != MAPGRID_UNDEFINED && MetatileBehavior_IsSurfableWaterOrUnderwater((u8)Behavior(b));
+}
+
+static int OpenB(u16 b)   /* walkable or water: not a solid thing */
+{
+    return b != MAPGRID_UNDEFINED && (!Solid(b) || (Behavior(b) >= 0x38 && Behavior(b) <= 0x3F));
+}
+
+static int ClassifyBlock(int bx, int by)
+{
+    u16 b = PortMapGetBlockWide(bx, by);
+    int beh, top, open = 0, water = 0, k;
+    static const s8 d4[4][2] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+    if (b == MAPGRID_UNDEFINED)
+        return sDark ? K_WALL : K_GROUND;
+    if (!Solid(b))
+        return K_GROUND;
+    beh = Behavior(b);
+    if (beh >= 0x38 && beh <= 0x3F)   /* ledges */
+        return K_FLAT;
+    top = TopPixels(b & MAPGRID_METATILE_ID_MASK);
+    for (k = 0; k < 4; k++) {
+        u16 n = PortMapGetBlockWide(bx + d4[k][0], by + d4[k][1]);
+        open += OpenB(n);
+        water += IsWaterB(n);
+    }
+    if (sDark)   /* caves, rooms: lone rocks stand, the rest is the wall */
+        return open >= 3 ? K_CARD : K_WALL;
+    if (top >= 40)   /* art on the top layer: trees, signs, fences, rocks in water */
+        return K_CARD;
+    if (water)   /* banks and shores */
+        return K_FLAT;
+    {   /* one block thin across the view (edges, cliff rims): flat */
+        u16 a, c;
+        if (sFy != 0) {
+            a = PortMapGetBlockWide(bx, by - 1); c = PortMapGetBlockWide(bx, by + 1);
+        } else {
+            a = PortMapGetBlockWide(bx - 1, by); c = PortMapGetBlockWide(bx + 1, by);
+        }
+        if (OpenB(a) && OpenB(c))
+            return K_FLAT;
+    }
+    return K_CARD;
+}
+
+static void ClassifyAll(int px, int py)
+{
+    int x, y;
+    sKx = px - KR; sKy = py - KR;
+    for (y = 0; y < KR * 2; y++)
+        for (x = 0; x < KR * 2; x++)
+            sKind[y][x] = (u8)ClassifyBlock(sKx + x, sKy + y);
+}
+
+static int KindAt(int bx, int by)
+{
+    bx -= sKx; by -= sKy;
+    if (bx < 0 || by < 0 || bx >= KR * 2 || by >= KR * 2)
+        return sDark ? K_WALL : K_CARD;
+    return sKind[by][bx];
 }
 
 /* ---- building the stage ---------------------------------------------- */
@@ -168,7 +277,6 @@ static u32 Mix(u32 a, u32 b, int t) /* t/256 of b */
            ((ra * (256 - t) + rb * t) >> 8);
 }
 
-static float sCamX, sCamY, sFx, sFy, sRx, sRy; /* camera, forward, right */
 
 static u32 GroundAt(float wx, float wy)
 {
@@ -176,7 +284,8 @@ static u32 GroundAt(float wx, float wy)
     int bx = ix >> 4, by = iy >> 4;
     u16 b = PortMapGetBlockWide(bx, by);
     const u32 *img;
-    if (b == MAPGRID_UNDEFINED || Solid(b))
+    int k = KindAt(bx, by);
+    if (b == MAPGRID_UNDEFINED || k == K_CARD || k == K_WALL)
         img = Meta(sBase, 0);
     else
         img = Meta(b & MAPGRID_METATILE_ID_MASK, 0);
@@ -196,8 +305,11 @@ static u32 HazeColor(void)
     return sSky ? 0xFF181818u : 0xFFFFECD2u;
 }
 
+static float sWallD[W];   /* the cave wall's distance per column (0: none) */
+
 static void DrawCard(const u32 *img, int w, int h, float sx, float sy, float s, int haze)
 {
+    float d = FOC / s;
     int dw = (int)(w * s), dh = (int)(h * s), x, y;
     int x0 = (int)(sx - dw / 2.0f), y0 = (int)(sy - dh);
     if (dw < 1 || dh < 1 || dw > 2000)
@@ -209,7 +321,7 @@ static void DrawCard(const u32 *img, int w, int h, float sx, float sy, float s, 
         for (x = 0; x < dw; x++) {
             int xx = x0 + x;
             u32 c;
-            if (xx < 0 || xx >= W)
+            if (xx < 0 || xx >= W || (sWallD[xx] > 0 && d > sWallD[xx]))
                 continue;
             c = img[iy * w + x * w / dw];
             if (c >> 24)
@@ -259,6 +371,57 @@ static int CmpCard(const void *a, const void *b)
 }
 
 static void BakeWeather(void);
+static u32 sStageW[H][W];      /* the stage with the weather tint */
+
+/* Caves and rooms: the solid mass around as a rock wall, cast per column
+ * (the nearest wall block along the column's ray, its picture stood up) */
+#define WALL_H 44.0f
+#define WALL_MIN 150.0f
+static void CaveWalls(void)
+{
+    int x, y;
+    for (x = 0; x < W; x++) {
+        float lat1 = (x - W / 2) / FOC, d, hitD = 0;
+        float wx = 0, wy = 0;
+        u16 hit = 0;
+        for (d = 16; d < 900; d += 1.5f) {
+            int k;
+            wx = sCamX + sFx * d + sRx * lat1 * d;
+            wy = sCamY + sFy * d + sRy * lat1 * d;
+            k = KindAt((int)floorf(wx / 16), (int)floorf(wy / 16));
+            if (k == K_WALL && d >= WALL_MIN) {
+                hit = PortMapGetBlockWide((int)floorf(wx / 16), (int)floorf(wy / 16));
+                hitD = d;
+                break;
+            }
+        }
+        if (!hitD) {   /* nothing: darkness down to the far ground */
+            continue;
+        }
+        sWallD[x] = hitD;
+        {
+            float s = FOC / hitD;
+            int foot = (int)(HOR + CAM_H * s), top = (int)(HOR + (CAM_H - WALL_H) * s);
+            int hz = hitD < 80 ? 0 : hitD > 780 ? 150 : (int)((hitD - 80) * 150 / 700);
+            /* along the wall: the coordinate that runs across the hit face */
+            float fx = wx - floorf(wx / 16) * 16, fy = wy - floorf(wy / 16) * 16;
+            int u = (fx < 1.5f || fx > 14.5f) ? (int)fy : (int)fx;
+            const u32 *img = Meta(hit == MAPGRID_UNDEFINED ? sBase : (hit & MAPGRID_METATILE_ID_MASK), 0);
+            if (foot >= H) foot = H - 1;
+            for (y = HOR + 1; y < top && y < H; y++)   /* nothing seen over the wall */
+                sStage[y][x] = SkyAt(HOR);
+            for (y = top < 0 ? 0 : top; y <= foot; y++) {
+                float hgt = CAM_H - (y - HOR) / s;   /* height over the ground */
+                int v = 15 - (((int)hgt) & 15);
+                u32 c = img[v * 16 + (u & 15)];
+                /* darker towards the foot, a lighter rim on top */
+                int shade = (int)(hgt * 90 / WALL_H);
+                c = Mix(c, 0xFF000000u, 110 - shade);
+                sStage[y][x] = hz ? Mix(c, HazeColor(), hz) : c;
+            }
+        }
+    }
+}
 
 static void Build(void)
 {
@@ -310,6 +473,9 @@ static void Build(void)
     sRx = -sFy; sRy = sFx;
     sCamX = px * 16 + 8 - sFx * 24;
     sCamY = py * 16 + 8 - sFy * 24;
+    sDark = sSky;
+    ClassifyAll(px, py);
+    memset(sWallD, 0, sizeof(sWallD));
 
     /* sky and ground */
     for (y = 0; y < H; y++) {
@@ -328,6 +494,9 @@ static void Build(void)
             }
         }
     }
+
+    if (sDark)
+        CaveWalls();
 
     /* a far tree line on the horizon (outside) */
     if (!sSky) {
@@ -360,6 +529,23 @@ static void Build(void)
         }
     }
 
+#ifndef __vita__
+    if (getenv("PKR_STAGE_DUMP")) {
+        for (y = -12; y <= 12; y++) {
+            char line[64];
+            for (x = -14; x <= 14; x++) {
+                u16 b = PortMapGetBlockWide(px + x, py + y);
+                u16 a = GetMetatileAttributesById(b & 0x3FF);
+                int beh = a & 0xFF, lay = (a >> 12) & 3;
+                char c = "._CW"[KindAt(px + x, py + y)];
+                (void)a; (void)beh; (void)lay; (void)b;
+                line[x + 14] = (x == 0 && y == 0) ? '@' : c;
+            }
+            line[29] = 0;
+            fprintf(stderr, "[stage] %s\n", line);
+        }
+    }
+#endif
     /* solid blocks ahead as upright cards (2x2 groups like trees) */
     memset(used, 0, sizeof(used));
     for (y = -40; y < 40; y++)
@@ -367,12 +553,11 @@ static void Build(void)
             int bx = px + x, by = py + y, w = 1, h = 1, k;
             u16 b = PortMapGetBlockWide(bx, by);
             float cx, cy, rx, ry, d, lat;
-            if (used[y + 48][x + 48] || b == MAPGRID_UNDEFINED || !Solid(b))
+            if (used[y + 48][x + 48] || b == MAPGRID_UNDEFINED || KindAt(bx, by) != K_CARD)
                 continue;
-            if (x + 1 < 40 && !used[y + 48][x + 49] && Solid(PortMapGetBlockWide(bx + 1, by)))
+            if (x + 1 < 40 && !used[y + 48][x + 49] && KindAt(bx + 1, by) == K_CARD)
                 w = 2;
-            if (y + 1 < 40 && Solid(PortMapGetBlockWide(bx, by + 1)) &&
-                (w == 1 || Solid(PortMapGetBlockWide(bx + 1, by + 1))))
+            if (y + 1 < 40 && KindAt(bx, by + 1) == K_CARD && (w == 1 || KindAt(bx + 1, by + 1) == K_CARD))
                 h = 2;
             for (k = 0; k < w * h; k++)
                 used[y + 48 + k / w][x + 48 + k % w] = 1;
@@ -420,6 +605,7 @@ static void Build(void)
     Shadow(SX(72), SY(110), 70, 14);
     BakeWeather();
     sState = 1;
+    gPortAnimBg = gPortBgMon[0] = gPortBgMon[1] = 0;
 }
 
 /* ---- every battle frame ---------------------------------------------- */
@@ -429,8 +615,6 @@ void BattleMainCB2(void);
 extern int gPortBattleIntro;   /* src/battle/anim/battle_intro.c */
 extern int gPortViewBattle;    /* port_view.c: battle window layout */
 extern int gPortDexPage;       /* src/pokedex.c */
-
-static u32 sStageW[H][W];      /* the stage with the weather tint */
 
 /* after loading a savestate: build the stage again */
 void PortStage_Reset(void)
@@ -530,15 +714,71 @@ static void PlanUi(void)
     }
 }
 
+/* BG1/BG2 across the whole width: the intro scenery, and the moves'
+ * pictures on them (backgrounds, sand, waves, ...) unless a battler's
+ * picture is there (Mike, 0.3.3) */
+static int Wide(int b)
+{
+    return gPortBattleIntro || gPortAnimBg || !gPortBgMon[b - 1];
+}
+
+/* A move's picture is 240x160 in a 256x256 map: outside it, the GBA
+ * picture again (not the unused map columns and rows) */
+static void WrapRegions(int b, int ys, int h)
+{
+    static const int cx[4] = {0, FX0, FX0 + PORT_GBA_W, FW}, cdx[3] = {FX0 - PORT_GBA_W, FX0, FX0 + PORT_GBA_W};
+    int rows[4], rdy[3], i, j, n = 0;
+    rows[0] = 0; rows[1] = ys; rows[2] = ys + PORT_GBA_H; rows[3] = h;
+    rdy[0] = ys - PORT_GBA_H; rdy[1] = ys; rdy[2] = ys + PORT_GBA_H;
+    for (j = 0; j < 3; j++)
+        for (i = 0; i < 3; i++) {
+            virtuappu_mode1_region *g = &virtuappu_mode1_bg_regions[b][n];
+            if (rows[j] >= rows[j + 1] || rows[j] >= h)
+                continue;
+            g->x0 = cx[i]; g->x1 = cx[i + 1];
+            g->y0 = rows[j]; g->y1 = rows[j + 1] < h ? rows[j + 1] : h;
+            g->dx = cdx[i]; g->dy = rdy[j];
+            n++;
+        }
+    virtuappu_mode1_bg_dx[b] = virtuappu_mode1_bg_dy[b] = 0;
+    virtuappu_mode1_bg_region_count[b] = n;
+}
+
+static void FieldKnobs(int noObj)
+{
+    int b, i;
+    ClearKnobs();
+    for (b = 1; b <= 2; b++) {
+        virtuappu_mode1_bg_dx[b] = -FX0 & 511;
+        virtuappu_mode1_bg_clip_y1[b] = FH;
+        /* the GBA picture; the intro scenery (a repeating band) as wide
+         * as the screen */
+        virtuappu_mode1_bg_clip_x0[b] = Wide(b) ? 0 : FX0;
+        virtuappu_mode1_bg_clip_x1[b] = Wide(b) ? FW : FX0 + PORT_GBA_W;
+        if (Wide(b) && !gPortBattleIntro)
+            WrapRegions(b, 0, FH);
+    }
+#ifndef __vita__
+    if (getenv("PKR_STAGE_BGOFF"))
+        virtuappu_mode1_bg_clip_x1[atoi(getenv("PKR_STAGE_BGOFF"))] = 0;
+#endif
+    virtuappu_mode1_win_dx = FX0;
+    for (i = 0; i < 128; i++) {
+        virtuappu_mode1_obj_dx[i] = FX0;
+        if (sUiObj[i] || noObj)
+            virtuappu_mode1_obj_dy[i] = 4000;
+    }
+}
+
 /* Pass 1: the field (BG1/BG2 and the sprites but the healthboxes and the
  * sprites of the text windows), GBA sized but 320 wide. */
 void PortStage_FieldPass(int *w, int *h)
 {
-    int b, i;
     PlanUi();
 #ifndef __vita__
     if (getenv("PKR_STAGE_OAM") && Port_FrameCounter() == (u32)atoi(getenv("PKR_STAGE_OAM"))) {
         extern u8 gHostOam[];
+        int i;
         for (i = 0; i < 128; i++) {
             u16 a0 = gHostOam[i * 8] | (gHostOam[i * 8 + 1] << 8);
             if ((a0 & 0x300) == 0x200) continue;
@@ -546,21 +786,7 @@ void PortStage_FieldPass(int *w, int *h)
         }
     }
 #endif
-    ClearKnobs();
-    for (b = 1; b <= 2; b++) {
-        virtuappu_mode1_bg_dx[b] = -FX0 & 511;
-        virtuappu_mode1_bg_clip_y1[b] = FH;
-        /* the GBA picture; the intro scenery (a repeating band) as wide
-         * as the screen */
-        virtuappu_mode1_bg_clip_x0[b] = gPortBattleIntro ? 0 : FX0;
-        virtuappu_mode1_bg_clip_x1[b] = gPortBattleIntro ? FW : FX0 + PORT_GBA_W;
-    }
-    virtuappu_mode1_win_dx = FX0;
-    for (i = 0; i < 128; i++) {
-        virtuappu_mode1_obj_dx[i] = FX0;
-        if (sUiObj[i])
-            virtuappu_mode1_obj_dy[i] = 4000;
-    }
+    FieldKnobs(0);
     *w = FW;
     *h = FH;
 }
@@ -606,6 +832,143 @@ int PortStage_HudPass(void)
 void PortStage_SetHudPixels(const u32 *pix)
 {
     sHudPix = pix;
+}
+
+/* Pass 1b, while the intro scenery slides in: the scenery alone (no
+ * sprites), copied down to the bottom of the screen (Mike, 0.3.3). */
+static const u32 *sIntroPix;
+
+int PortStage_IntroPass(void)
+{
+    if (!gPortBattleIntro || gPortDexPage)
+        return 0;
+    FieldKnobs(1);
+    return 1;
+}
+
+void PortStage_SetIntroPixels(const u32 *pix)
+{
+    sIntroPix = pix;
+}
+
+/* Pass 1c, while a move's background is up: BG1/BG2 alone over the whole
+ * screen (GBA lines -38..143), put on the stage. */
+#define BGFILL_DY 38
+#define BGFILL_H 182
+static u32 sFillStage[H][W];
+static int sFill;
+
+int PortStage_BgFillPass(int *h)
+{
+    int b, i;
+    int full[3] = {0, 0, 0}, any = 0;
+    extern u8 gHostIo[], gHostVram[];
+    sFill = 0;
+    if (gPortDexPage || gPortBattleIntro)
+        return 0;
+    /* a picture over the whole GBA screen on BG1 / BG2 (backgrounds of
+     * moves, Attract's hearts, ...): its tile map is (nearly) all set */
+    for (b = 1; b <= 2; b++) {
+        u16 cnt = gHostIo[8 + b * 2] | (gHostIo[9 + b * 2] << 8);
+        const u16 *map = (const u16 *)(gHostVram + ((cnt >> 8) & 31) * 0x800);
+        int n = 0, tx, ty;
+        if (!(gHostIo[1] & (1 << b)) || gPortBgMon[b - 1])
+            continue;
+        for (ty = 0; ty < 20; ty++)
+            for (tx = 0; tx < 30; tx++)
+                n += (map[ty * 32 + tx] & 0x3FF) != 0;
+        if (n >= 540)
+            full[b] = any = 1;
+    }
+    if (!any)
+        return 0;
+    ClearKnobs();
+    for (b = 1; b <= 2; b++)
+        if (full[b])
+            WrapRegions(b, BGFILL_DY, BGFILL_H);
+    virtuappu_mode1_win_dx = FX0;
+    virtuappu_mode1_win_dy = BGFILL_DY;
+    for (i = 0; i < 128; i++)
+        virtuappu_mode1_obj_dy[i] = 4000;
+    *h = BGFILL_H;
+    return 1;
+}
+
+void PortStage_SetBgFillPixels(const u32 *pix, int pitch)
+{
+    int x, y;
+    if (!pix)
+        return;
+    int top = 0, bot = 0;
+    for (x = 0; x < FW; x += 4) {   /* a picture up to the GBA screen's edge */
+        top += (pix[BGFILL_DY * pitch + x] >> 24) != 0;
+        bot += (pix[(BGFILL_DY + PORT_GBA_H - 1 < BGFILL_H ? BGFILL_DY + PORT_GBA_H - 1 : BGFILL_H - 1) * pitch + x] >> 24) != 0;
+    }
+    top = top * 4 >= FW * 9 / 10;
+    bot = bot * 4 >= FW * 9 / 10;
+    for (y = 0; y < H; y++) {
+        /* above and below the GBA picture its rows mirrored: pictures
+         * with a gradient go on without a seam */
+        int gy = (y * 2 + 1) / 3 - BGFILL_DY;
+        const u32 *r;
+        if ((gy < 0 && !top) || (gy >= PORT_GBA_H && !bot)) {
+            memcpy(sFillStage[y], sStageW[y], sizeof(sFillStage[y]));
+            continue;
+        }
+        if (gy < 0)
+            gy = -gy - 1;
+        if (gy >= PORT_GBA_H)
+            gy = 2 * PORT_GBA_H - 1 - gy;
+        if (gy + BGFILL_DY >= BGFILL_H)
+            gy = BGFILL_H - 1 - BGFILL_DY;
+        r = pix + (gy + BGFILL_DY) * pitch;
+        for (x = 0; x < W; x++) {
+            u32 c = r[(x * 2 + 1) / 3];
+            sFillStage[y][x] = (c >> 24) ? c : sStageW[y][x];
+        }
+    }
+    sFill = 1;
+}
+
+/* more rows of the scenery below its band, each a bit lower and to the
+ * side, the lowest in front: grass looks like more grass, rocks like more
+ * rocks */
+#define INTRO_STEP 14
+static void IntroRows(u32 *fl, int fpitch)
+{
+    int x, y, k, top = -1, bot = -1, start;
+    for (y = 0; y < FH; y++) {
+        int n = 0;
+        for (x = 0; x < FW; x += 4)
+            n += (sIntroPix[y * fpitch + x] >> 24) != 0;
+        if (n > FW / 40) {
+            if (top < 0) top = y;
+            bot = y + 1;
+        }
+    }
+    if (top < 0 || bot - top < INTRO_STEP + 4)
+        return;
+    start = bot;
+    for (y = start; y < FH; y++) {
+        u32 *d = fl + y * fpitch;
+        for (k = 1; ; k++) {
+            int sy = y - k * INTRO_STEP, sh = (k * 7) % FW;
+            const u32 *sr;
+            if (sy < top)
+                break;
+            if (sy >= bot)
+                continue;
+            sr = sIntroPix + sy * fpitch;
+            for (x = 0; x < FW; x++) {
+                int sx = x - sh;
+                u32 c;
+                if (sx < 0) sx += FW;
+                c = sr[sx];
+                if (c >> 24)
+                    d[x] = c;
+            }
+        }
+    }
 }
 
 static void ObjBox(int i, int *x, int *y, int *w, int *h)
@@ -801,6 +1164,25 @@ void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
     Particles();
     for (i = 0; i < sRegCount; i++)
         Unframe((u32 *)ui, upitch, &sReg[i]);
+    /* a window over our healthbox (the switch question's Yes/No): the
+     * window's region is a little wider than its frame, and the box's
+     * pixels there would come along as a thin column (Mike, 0.3.3) */
+    if (sHudPix)
+        for (i = 0; i < sRegCount; i++) {
+            const virtuappu_mode1_region *g = &sReg[i];
+            int x0 = g->x0 - g->dx, y0 = g->y0 - g->dy, w = g->x1 - g->x0, h = g->y1 - g->y0;
+            u32 *u = (u32 *)ui;
+            for (y = y0; y < y0 + h; y++)
+                for (x = x0; x < x0 + w; x++) {
+                    int p = y * upitch + x;
+                    if (x < 0 || y < 0 || x >= PORT_GBA_W || y >= PORT_GBA_H)
+                        continue;
+                    if (x > x0 + 2 && x < x0 + w - 3 && y > y0 + 2 && y < y0 + h - 3)
+                        continue;   /* the rim only */
+                    if ((sHudPix[p] >> 24) && u[p] == sHudPix[p])
+                        u[p] &= 0x00FFFFFFu;
+                }
+        }
     for (i = 0; i < sRegCount; i++) {
         const virtuappu_mode1_region *g = &sReg[i];
         PortBlit *b = &sBlit[nblit++];
@@ -834,7 +1216,13 @@ void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
         }
     }
     memset(&f, 0, sizeof(f));
-    f.stage = &sStageW[0][0];
+    f.stage = sFill ? &sFillStage[0][0] : &sStageW[0][0];
+    {
+        static int lastFill;
+        if (sFill || lastFill)
+            serial++;
+        lastFill = sFill;
+    }
     f.stageSerial = serial;
     f.parts = sPart;
     f.nparts = sNPart;
@@ -847,6 +1235,8 @@ void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
         for (y = 112; y < FH; y++)
             for (x = 0; x < FW; x++)
                 fl[y * fpitch + x] &= 0x00FFFFFFu;
+        if (sIntroPix)
+            IntroRows(fl, fpitch);
     }
     f.field = field;
     f.fieldPitch = fpitch;

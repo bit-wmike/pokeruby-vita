@@ -93,6 +93,9 @@ static void RaiseIrq(u16 flag)
 
 /* ---- display ---------------------------------------------------------- */
 
+static u8 sLineIo[160][0x56];
+int Port_EdgeFillScreen(void);   /* src/fldeff_flash.c */
+
 static void PreLine(int line)
 {
     u16 dispstat = IO16(0x004);
@@ -109,6 +112,16 @@ static void PreLine(int line)
     IO16(0x006) = (u16)line;
     if ((dispstat & DISPSTAT_VCOUNT_INTR) && (dispstat >> 8) == line)
         RaiseIrq(INTR_FLAG_VCOUNT);
+    if (line < 160)   /* the registers of each line, for a second pass */
+        memcpy(sLineIo[line], gHostIo, sizeof(sLineIo[0]));
+}
+
+/* a second pass of the same frame: the lines' registers again, without
+ * running the HBlank DMA and interrupts twice */
+static void ReplayLine(int line)
+{
+    if (line < 160)
+        memcpy(gHostIo, sLineIo[line], sizeof(sLineIo[0]));
 }
 
 /* ---- the backdrop of GBA sized screens -------------------------------- */
@@ -266,6 +279,39 @@ static void RenderFrame(void)
         Port_ProfileBegin(PORT_PROF_RENDER);
         virtuappu_mode1_render_frame(&ppu);
         sRendering = 0;
+        {   /* the intro scenery alone, while it slides in */
+            static uint32_t intro[FIELD_W * 160];
+            int PortStage_IntroPass(void);
+            void PortStage_SetIntroPixels(const uint32_t *pix);
+            if (PortStage_IntroPass()) {
+                static u8 io[0x56];
+                memcpy(io, gHostIo, sizeof(io));
+                virtuappu_mode1_set_output_buffer(intro, FIELD_W);
+                virtuappu_mode1_pre_line_callback = ReplayLine;
+                virtuappu_mode1_render_frame(&ppu);
+                memcpy(gHostIo, io, sizeof(io));
+                PortStage_SetIntroPixels(intro);
+            } else {
+                PortStage_SetIntroPixels(NULL);
+            }
+        }
+        {   /* a move's background over the whole screen */
+            static uint32_t fill[FIELD_W * 184];
+            int PortStage_BgFillPass(int *h);
+            void PortStage_SetBgFillPixels(const uint32_t *pix, int pitch);
+            int fh2;
+            if (PortStage_BgFillPass(&fh2)) {
+                static u8 io[0x56];
+                memcpy(io, gHostIo, sizeof(io));
+                ppu.frame_height = (uint16_t)fh2;
+                virtuappu_mode1_set_output_buffer(fill, FIELD_W);
+                virtuappu_mode1_pre_line_callback = ReplayLine;
+                virtuappu_mode1_render_frame(&ppu);
+                memcpy(gHostIo, io, sizeof(io));
+                ppu.frame_height = (uint16_t)fh;
+                PortStage_SetBgFillPixels(fill, FIELD_W);
+            }
+        }
         STAGE_T(0);
         PortStage_UiPass();
         memset(&ppu, 0, sizeof(ppu));
@@ -309,6 +355,33 @@ static void RenderFrame(void)
     Port_ProfileEnd(PORT_PROF_RENDER);
     sRendering = 0;
 
+    if (!wide && gPortConfig.viewMode == PORT_VIEW_FULL && Port_EdgeFillScreen()) {
+        /* a full screen picture of the GBA (the cave entry's rings): its
+         * edges carried out to the whole wide screen, 1:1 like the field
+         * (Mike, 0.3.3) */
+        static uint32_t gba[PORT_GBA_W * PORT_GBA_H];
+        int x, y, ox = (PORT_WIDE_W - PORT_GBA_W) / 2, oy = (PORT_WIDE_H - PORT_GBA_H) / 2;
+        for (y = 0; y < PORT_GBA_H; y++)
+            memcpy(gba + y * PORT_GBA_W, sFrameBuffer + y * FRAME_MAX_W, PORT_GBA_W * 4);
+        for (y = 0; y < PORT_WIDE_H; y++) {
+            int gy = y - oy;
+            const uint32_t *r;
+            if (gy < 0) gy = 0;
+            if (gy >= PORT_GBA_H) gy = PORT_GBA_H - 1;
+            r = gba + gy * PORT_GBA_W;
+            for (x = 0; x < PORT_WIDE_W; x++) {
+                int gx = x - ox;
+                if (gx < 0) gx = 0;
+                if (gx >= PORT_GBA_W) gx = PORT_GBA_W - 1;
+                sFrameBuffer[y * FRAME_MAX_W + x] = r[gx];
+            }
+        }
+        if (sBackdropOn)
+            Platform_SetBackdrop(NULL);
+        sBackdropOn = 0;
+        Platform_Present(sFrameBuffer, PORT_WIDE_W, PORT_WIDE_H, FRAME_MAX_W, PORT_WIDE_H);
+        return;
+    }
     Platform_Present(sFrameBuffer, width, height, FRAME_MAX_W, zoom);
 }
 

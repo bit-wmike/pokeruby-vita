@@ -119,6 +119,14 @@ void sub_810CC54(void)
     UpdatePaletteFade();
 }
 
+#ifdef PORT
+/* port: the cave entry / exit screen fills the wide view (port/host_core.c) */
+int Port_EdgeFillScreen(void)
+{
+    return gMain.callback2 == sub_810CC54;
+}
+#endif
+
 static void VBlankCB(void)
 {
     LoadOam();

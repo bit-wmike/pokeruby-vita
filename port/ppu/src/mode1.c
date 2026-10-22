@@ -66,6 +66,9 @@ static uint32_t mode1_backdrop_key_last;
 
 /* Window edges in GBA-screen coordinates -> wide frame coordinates. */
 static inline void mode1_port_window(int* left, int* right, int* top, int* bottom) {
+    if (virtuappu_mode1_win_dx && *left == *right)
+        return;   /* an empty window (Flash's darkness above and below the
+                   * light) stays empty in the wide view */
     if (virtuappu_mode1_win_dx) {
         *left = *left == 0 ? 0 : *left + virtuappu_mode1_win_dx;
         *right = *right >= 240 ? 1024 : *right + virtuappu_mode1_win_dx;

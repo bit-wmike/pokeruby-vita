@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "global.h"
 #include "port_hoenn.h"
 #include "constants/abilities.h"
@@ -270,6 +271,10 @@ void CB2_InitBattleInternal(void)
         gBattleEnvironment = BattleSetup_GetEnvironmentId();
 #else
     gBattleEnvironment = BattleSetup_GetEnvironmentId();
+#endif
+#if defined(PORT) && !defined(__vita__)
+    if (getenv("PKR_TERRAIN"))   /* host tests: the battle's scenery */
+        gBattleEnvironment = (u8)atoi(getenv("PKR_TERRAIN"));
 #endif
 
     Text_InitWindowWithTemplate(&gWindowTemplate_Contest_MoveDescription, &gWindowTemplate_81E6C58);
