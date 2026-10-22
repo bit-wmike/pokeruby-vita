@@ -129,7 +129,11 @@ u16 *GetVarPointer(u16 id)
     u16 *p = GetVarPointerOrNull(id);
     if (p)
         return p;
-    sScratch = 0;
+    /* not a variable: its number as the value, like VarGet (scripts copy
+     * constants with copyvar - "copyvar VAR_ICE_STEP_COUNT, 1" in the
+     * cracked-floor caves read 0 here and dropped the player through the
+     * floor at once; Mike, 0.3.11, Granite Cave) */
+    sScratch = id;
     return &sScratch;
 }
 #define GetVarPointer GetVarPointerOrNull

@@ -2529,7 +2529,14 @@ static void PlayerHandleSuccessBallThrowAnim(void)
 {
     gBattleAnimationInfo->ballThrowCaseId = BALL_3_SHAKES_SUCCESS;
     gDoingBattleAnim = TRUE;
+    #ifdef PORT
+    // wild double battles: at the wild Pokemon that is still there
+    InitAndLaunchSpecialAnimation(gActiveBattler, gActiveBattler,
+                                  (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) ? gBattlerTarget : GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT),
+                                  B_ANIM_BALL_THROW);
+#else
     InitAndLaunchSpecialAnimation(gActiveBattler, gActiveBattler, GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT), B_ANIM_BALL_THROW);
+#endif
     gBattlerControllerFuncs[gActiveBattler] = CompleteOnSpecialAnimDone;
 }
 
@@ -2539,7 +2546,14 @@ static void PlayerHandleBallThrowAnim(void)
 
     gBattleAnimationInfo->ballThrowCaseId = ballThrowCaseId;
     gDoingBattleAnim = TRUE;
+    #ifdef PORT
+    // wild double battles: at the wild Pokemon that is still there
+    InitAndLaunchSpecialAnimation(gActiveBattler, gActiveBattler,
+                                  (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) ? gBattlerTarget : GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT),
+                                  B_ANIM_BALL_THROW);
+#else
     InitAndLaunchSpecialAnimation(gActiveBattler, gActiveBattler, GetBattlerAtPosition(B_POSITION_OPPONENT_LEFT), B_ANIM_BALL_THROW);
+#endif
     gBattlerControllerFuncs[gActiveBattler] = CompleteOnSpecialAnimDone;
 }
 

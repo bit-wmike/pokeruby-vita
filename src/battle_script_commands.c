@@ -9430,6 +9430,14 @@ static void atkEE_removelightscreenreflect(void) //brick break
     gBattlescriptCurrInstr++;
 }
 
+#ifdef PORT
+// the wild Pokemon the ball was thrown at (wild double battles: not always
+// the one opposite the attacker)
+#define PORT_CAUGHT_BATTLER gBattlerTarget
+#else
+#define PORT_CAUGHT_BATTLER (gBattlerAttacker ^ 1)
+#endif
+
 void atkEF_handleballthrow(void)
 {
     u8 ball_multiplier = 0;
@@ -9438,6 +9446,13 @@ void atkEF_handleballthrow(void)
 
     gActiveBattler = gBattlerAttacker;
     gBattlerTarget = gBattlerAttacker ^ 1;
+#ifdef PORT
+    // port, wild double battles: the ball goes to the wild Pokemon that is
+    // still there (the bag allows it only then; Mike, 0.3.11)
+    if ((gBattleTypeFlags & BATTLE_TYPE_DOUBLE)
+     && (gBattleMons[gBattlerTarget].hp == 0 || (gAbsentBattlerFlags & gBitTable[gBattlerTarget])))
+        gBattlerTarget ^= 2;
+#endif
     if (gBattleTypeFlags & BATTLE_TYPE_TRAINER)
     {
         BtlController_EmitBallThrowAnim(0, 5);
@@ -9563,9 +9578,9 @@ void atkEF_handleballthrow(void)
 
 static void atkF0_givecaughtmon(void)
 {
-    GiveMonToPlayer(&gEnemyParty[gBattlerPartyIndexes[gBattlerAttacker ^ 1]]);
+    GiveMonToPlayer(&gEnemyParty[gBattlerPartyIndexes[PORT_CAUGHT_BATTLER]]);
     gBattleResults.caughtPoke = gBattleMons[gBattlerAttacker ^ 1].species;
-    GetMonData(&gEnemyParty[gBattlerPartyIndexes[gBattlerAttacker ^ 1]], MON_DATA_NICKNAME, gBattleResults.caughtNick);
+    GetMonData(&gEnemyParty[gBattlerPartyIndexes[PORT_CAUGHT_BATTLER]], MON_DATA_NICKNAME, gBattleResults.caughtNick);
     gBattlescriptCurrInstr++;
 }
 
@@ -9722,15 +9737,15 @@ static void atkF3_trygivecaughtmonnick(void)
     case 2:
         if (!gPaletteFade.active)
         {
-            GetMonData(&gEnemyParty[gBattlerPartyIndexes[gBattlerAttacker ^ 1]], MON_DATA_NICKNAME, gBattleStruct->caughtNick);
-            DoNamingScreen(2, gBattleStruct->caughtNick, GetMonData(&gEnemyParty[gBattlerPartyIndexes[gBattlerAttacker ^ 1]], MON_DATA_SPECIES), GetMonGender(&gEnemyParty[gBattlerPartyIndexes[gBattlerAttacker ^ 1]]), GetMonData(&gEnemyParty[gBattlerPartyIndexes[gBattlerAttacker ^ 1]], MON_DATA_PERSONALITY, 0), BattleMainCB2);
+            GetMonData(&gEnemyParty[gBattlerPartyIndexes[PORT_CAUGHT_BATTLER]], MON_DATA_NICKNAME, gBattleStruct->caughtNick);
+            DoNamingScreen(2, gBattleStruct->caughtNick, GetMonData(&gEnemyParty[gBattlerPartyIndexes[PORT_CAUGHT_BATTLER]], MON_DATA_SPECIES), GetMonGender(&gEnemyParty[gBattlerPartyIndexes[PORT_CAUGHT_BATTLER]]), GetMonData(&gEnemyParty[gBattlerPartyIndexes[PORT_CAUGHT_BATTLER]], MON_DATA_PERSONALITY, 0), BattleMainCB2);
             gBattleCommunication[0]++;
         }
         break;
     case 3:
         if (gMain.callback2 == BattleMainCB2 && !gPaletteFade.active )
         {
-            SetMonData(&gEnemyParty[gBattlerPartyIndexes[gBattlerAttacker ^ 1]], MON_DATA_NICKNAME, gBattleStruct->caughtNick);
+            SetMonData(&gEnemyParty[gBattlerPartyIndexes[PORT_CAUGHT_BATTLER]], MON_DATA_NICKNAME, gBattleStruct->caughtNick);
             gBattlescriptCurrInstr = T1_READ_PTR(gBattlescriptCurrInstr + 1);
         }
         break;

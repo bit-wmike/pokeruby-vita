@@ -720,6 +720,8 @@ static void PlanUi(void)
  * picture is there (Mike, 0.3.3) */
 static int Wide(int b)
 {
+    if (gPortDexPage)   /* the caught Pokemon's dex page: GBA sized (Mike, 0.3.11) */
+        return 0;
     return gPortBattleIntro || gPortAnimBg || !gPortBgMon[b - 1];
 }
 
