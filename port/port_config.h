@@ -16,6 +16,7 @@ struct PortConfig {
     /* button mapping in the game (not the port menu): the GBA function of
      * each Vita button, PORT_KEY_* - order of PORT_BTN_* */
     int keymap[8];
+    int wildDoubles;  /* wild double battles: percent of wild battles (0, 30, 50); swarms always */
 };
 
 enum { PORT_BTN_CROSS, PORT_BTN_CIRCLE, PORT_BTN_SQUARE, PORT_BTN_TRIANGLE, PORT_BTN_L, PORT_BTN_R,

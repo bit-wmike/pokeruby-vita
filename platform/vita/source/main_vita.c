@@ -484,7 +484,7 @@ void PortCheat_MaxMoney(void);
 
 enum {
     MI_H_DISPLAY, MI_VIEW, MI_STYLE, MI_FPS,
-    MI_H_GAME, MI_HOENN, MI_TURBO,
+    MI_H_GAME, MI_HOENN, MI_DOUBLES, MI_TURBO,
     MI_H_CHEATS, MI_EXP, MI_MONEY, MI_ENC, MI_SHINY, MI_RANDOM, MI_FLEE, MI_RUN,
     MI_H_STATE, MI_SAVE, MI_LOAD,
     MI_BACK,
@@ -519,6 +519,8 @@ static void MenuLine(int item, char *buf, size_t size)
         case MI_FPS: snprintf(buf, size, "Bildrate: %s", gPortConfig.frameRate30 ? "30 (Spieltempo bleibt)" : "60"); break;
         case MI_H_GAME: snprintf(buf, size, "SPIEL"); break;
         case MI_HOENN: snprintf(buf, size, "Pokemon: %s", gPortConfig.gen3Wild ? "Nur Hoenn (3. Gen.)" : "Original"); break;
+        case MI_DOUBLES: snprintf(buf, size, "Wilde Doppelkaempfe: %s", gPortConfig.wildDoubles == 50 ? "50 %" :
+                                         gPortConfig.wildDoubles == 30 ? "30 %" : "Normal"); break;
         case MI_TURBO: snprintf(buf, size, "Turbo (rechter Stick hoch halten): %dx", gPortConfig.turbo); break;
         case MI_H_CHEATS: snprintf(buf, size, "CHEATS (bis zum Beenden, EP bleibt gespeichert)"); break;
         case MI_EXP: snprintf(buf, size, "EP-Bonus: %dx", gPortConfig.expMult); break;
@@ -564,6 +566,12 @@ static int MenuChange(int item, int d)
             break;
         case MI_FPS: gPortConfig.frameRate30 ^= 1; break;
         case MI_HOENN: gPortConfig.gen3Wild ^= 1; break;
+        case MI_DOUBLES: {
+            static const int v[3] = {0, 30, 50};
+            int k = gPortConfig.wildDoubles == 50 ? 2 : gPortConfig.wildDoubles == 30 ? 1 : 0;
+            gPortConfig.wildDoubles = v[Wrap(k, d ? d : 1, 3)];
+            break;
+        }
         case MI_TURBO: gPortConfig.turbo = 2 + Wrap(gPortConfig.turbo - 2, d ? d : 1, 3); break;
         case MI_EXP: {
             static const int steps[] = {1, 2, 4, 8};
@@ -670,7 +678,7 @@ static void RunMenu(void)
                                      0.85f, line);
             if (i == sel)
                 vita2d_pgf_draw_text(sFont, cx + 70, y, RGBA8(255, 230, 80, 255), 0.85f, ">");
-            y += 21;
+            y += 20;
         }
         if (sMenuNote[0])
             vita2d_pgf_draw_text(sFont, 520, 44, RGBA8(255, 200, 120, 255), 0.8f, sMenuNote);
@@ -685,8 +693,8 @@ static void RunMenu(void)
     }
     Port_ConfigSave();
     sMenuOpen = 0;
-    Platform_Log("[ui] menu closed: hoenn=%d view=%d style=%d fps30=%d turbo=%d cheats=%d%d%d%d%d\n",
-                 gPortConfig.gen3Wild, gPortConfig.viewMode, gPortConfig.displayStyle, gPortConfig.frameRate30,
+    Platform_Log("[ui] menu closed: hoenn=%d doubles=%d view=%d style=%d fps30=%d turbo=%d cheats=%d%d%d%d%d\n",
+                 gPortConfig.gen3Wild, gPortConfig.wildDoubles, gPortConfig.viewMode, gPortConfig.displayStyle, gPortConfig.frameRate30,
                  gPortConfig.turbo, gPortCheats.encounters, gPortCheats.shiny, gPortCheats.randomSpecies,
                  gPortCheats.alwaysFlee, gPortCheats.runIndoors);
     sAnchored = 0; /* the menu stalled the game: re-anchor the pacing */

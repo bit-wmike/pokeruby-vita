@@ -7,7 +7,7 @@
 
 struct PortConfig gPortConfig = {PORT_VIEW_FULL, PORT_STYLE_PIXEL, 0, 1, 0, 3,
     /* X: A, O: B, square: B (run), triangle: SELECT (registered item) */
-    {PORT_KEY_A, PORT_KEY_B, PORT_KEY_B, PORT_KEY_SELECT, PORT_KEY_L, PORT_KEY_R, PORT_KEY_START, PORT_KEY_SELECT}};
+    {PORT_KEY_A, PORT_KEY_B, PORT_KEY_B, PORT_KEY_SELECT, PORT_KEY_L, PORT_KEY_R, PORT_KEY_START, PORT_KEY_SELECT}, 0};
 const char *const gPortBtnNames[PORT_BTN_COUNT] = {
     "key_cross", "key_circle", "key_square", "key_triangle", "key_l", "key_r", "key_start", "key_select"};
 struct PortCheats gPortCheats = {1, 0, 0, 0, 0};
@@ -26,6 +26,8 @@ static void Set(const char *key, int v)
         gPortConfig.expMult = v;
     else if (!strcmp(key, "only_hoenn"))
         gPortConfig.gen3Wild = v != 0;
+    else if (!strcmp(key, "wild_doubles") && (v == 0 || v == 30 || v == 50))
+        gPortConfig.wildDoubles = v;
     else {
         int i;
         for (i = 0; i < PORT_BTN_COUNT; i++)
@@ -70,9 +72,10 @@ void Port_ConfigSave(void)
                      "frame_rate_30 = %d\n"
                      "only_hoenn = %d\n"
                      "exp_multiplier = %d\n"
-                     "turbo = %d\n",
+                     "turbo = %d\n"
+                     "wild_doubles = %d\n",
                      gPortConfig.viewMode, gPortConfig.displayStyle, gPortConfig.frameRate30, gPortConfig.gen3Wild,
-                     gPortConfig.expMult, gPortConfig.turbo);
+                     gPortConfig.expMult, gPortConfig.turbo, gPortConfig.wildDoubles);
     /* buttons: 0 none, 1 A, 2 B, 3 START, 4 SELECT, 5 L, 6 R */
     for (i = 0; i < PORT_BTN_COUNT; i++)
         n += snprintf(buf + n, sizeof(buf) - (size_t)n, "%s = %d\n", gPortBtnNames[i], gPortConfig.keymap[i]);
@@ -99,6 +102,15 @@ int PortCheatEncounters(void)
 int PortCheatShiny(void)
 {
     return gPortCheats.shiny;
+}
+
+int PortCheatWildDoubles(void)
+{
+#ifndef __vita__
+    if (getenv("PKR_DOUBLES")) /* host build */
+        return atoi(getenv("PKR_DOUBLES"));
+#endif
+    return gPortConfig.wildDoubles;
 }
 
 int PortCheatFlee(void)

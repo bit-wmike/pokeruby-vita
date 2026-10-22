@@ -397,6 +397,61 @@ static bool8 SetUpMassOutbreakEncounter(bool8 checkRepel)
     }
 }
 
+#ifdef PORT
+/* Wild double battles (port option, Mike): a second wild Pokemon of the
+ * same area joins - in the given percentage of wild battles, in a swarm
+ * always; only with two Pokemon able to fight. Not when fishing or after
+ * Rock Smash (one Pokemon). */
+int gPortNoWildDouble;
+int PortCheatWildDoubles(void);
+
+bool8 PortTryWildDouble(void)
+{
+    struct Pokemon first;
+    u16 headerNum, species;
+    int i, usable = 0;
+    bool8 outbreak;
+
+    if (gPortNoWildDouble)
+    {
+        gPortNoWildDouble = 0;
+        return FALSE;
+    }
+    for (i = 0; i < PARTY_SIZE; i++)
+        if (GetMonData(&gPlayerParty[i], MON_DATA_SPECIES) != SPECIES_NONE && !GetMonData(&gPlayerParty[i], MON_DATA_IS_EGG)
+         && GetMonData(&gPlayerParty[i], MON_DATA_HP) != 0)
+            usable++;
+    if (usable < 2)
+        return FALSE;
+    species = GetMonData(&gEnemyParty[0], MON_DATA_SPECIES);
+    outbreak = gSaveBlock1.outbreakPokemonSpecies != 0 && species == gSaveBlock1.outbreakPokemonSpecies
+            && gSaveBlock1.location.mapNum == gSaveBlock1.outbreakLocationMapNum
+            && gSaveBlock1.location.mapGroup == gSaveBlock1.outbreakLocationMapGroup;
+    if (!outbreak && (int)(Random() % 100) >= PortCheatWildDoubles())
+        return FALSE;
+    headerNum = GetCurrentMapWildMonHeader();
+    if (headerNum == 0xFFFF)
+        return FALSE;
+    first = gEnemyParty[0];
+    if (outbreak)
+        SetUpMassOutbreakEncounter(FALSE);
+    else if (TestPlayerAvatarFlags(PLAYER_AVATAR_FLAG_SURFING) && gWildMonHeaders[headerNum].waterMonsInfo)
+        GenerateWildMon(gWildMonHeaders[headerNum].waterMonsInfo, 1, FALSE);
+    else if (gWildMonHeaders[headerNum].landMonsInfo)
+        GenerateWildMon(gWildMonHeaders[headerNum].landMonsInfo, 0, FALSE);
+    else if (gWildMonHeaders[headerNum].waterMonsInfo)
+        GenerateWildMon(gWildMonHeaders[headerNum].waterMonsInfo, 1, FALSE);
+    else
+    {
+        gEnemyParty[0] = first;
+        return FALSE;
+    }
+    gEnemyParty[1] = gEnemyParty[0];
+    gEnemyParty[0] = first;
+    return TRUE;
+}
+#endif
+
 static bool8 DoMassOutbreakEncounterTest(void)
 {
     if (gSaveBlock1.outbreakPokemonSpecies != 0
@@ -578,6 +633,9 @@ void ScrSpecial_RockSmashWildEncounter(void)
         else if (DoWildEncounterTest(wildPokemonInfo->encounterRate, 1) == TRUE
          && GenerateWildMon(wildPokemonInfo, 2, TRUE) == TRUE)
         {
+#ifdef PORT
+            gPortNoWildDouble = 1;
+#endif
             BattleSetup_StartWildBattle();
             gSpecialVar_Result = 1;
             return;
@@ -661,6 +719,9 @@ void FishingWildEncounter(u8 rod)
     }
     IncrementGameStat(GAME_STAT_FISHING_CAPTURES);
     sub_80BEA50(species);
+#ifdef PORT
+    gPortNoWildDouble = 1;
+#endif
     BattleSetup_StartWildBattle();
 }
 

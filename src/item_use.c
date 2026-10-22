@@ -873,8 +873,26 @@ void ItemUseOutOfBattle_EvolutionStone(u8 taskId)
     SetPokemonItemUseAndFadeOut(taskId);
 }
 
+#ifdef PORT
+extern u8 gAbsentBattlerFlags;
+extern const u32 gBitTable[];
+extern struct BattlePokemon gBattleMons[];
+/* port option wild double battles: a ball only for the last wild one */
+static const u8 sText_PortTwoWildMons[] = _("Es sind noch zwei POKéMON da!\nSo kannst du nicht zielen!");
+#endif
+
 void ItemUseInBattle_PokeBall(u8 taskId)
 {
+#ifdef PORT
+    if ((gBattleTypeFlags & BATTLE_TYPE_DOUBLE) && !(gBattleTypeFlags & BATTLE_TYPE_TRAINER)
+     && gBattleMons[1].hp != 0 && gBattleMons[3].hp != 0
+     && !(gAbsentBattlerFlags & (gBitTable[1] | gBitTable[3])))
+    {
+        Menu_EraseWindowRect(0, 13, 13, 20);
+        DisplayItemMessageOnField(taskId, sText_PortTwoWildMons, CleanUpItemMenuMessage, 1);
+        return;
+    }
+#endif
     if (PlayerPartyAndPokemonStorageFull() == FALSE) // have room for mon?
     {
         RemoveBagItem(gSpecialVar_ItemId, 1);

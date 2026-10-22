@@ -522,6 +522,13 @@ static void DoStandardWildBattle(void)
     sub_80597F4();
     gMain.savedCallback = CB2_EndWildBattle;
     gBattleTypeFlags = 0;
+#ifdef PORT
+    {
+        bool8 PortTryWildDouble(void);
+        if (PortTryWildDouble())   /* port option: wild double battles */
+            gBattleTypeFlags = BATTLE_TYPE_DOUBLE;
+    }
+#endif
     CreateBattleStartTask(GetWildBattleTransition(), 0);
     IncrementGameStat(GAME_STAT_TOTAL_BATTLES);
     IncrementGameStat(GAME_STAT_WILD_BATTLES);
