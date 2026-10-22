@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "global.h"
+#include "field_camera.h"
 #include "main.h"
 #include "fieldmap.h"
 #include "constants/map_types.h"
@@ -42,6 +43,7 @@ static struct {
     int fx, fy;          /* world pixel at the wide frame's top-left */
     u8 xTile, yTile;
     s16 posX, posY;
+    int map;             /* group * 256 + number at the snapshot */
 } sSnap;
 
 static inline u16 IoRead(u32 off)
@@ -95,10 +97,14 @@ void PortView_VBlank(void)
     PortFieldCameraTileOffset(&sSnap.xTile, &sSnap.yTile);
     sSnap.posX = gSaveBlock1.pos.x;
     sSnap.posY = gSaveBlock1.pos.y;
+    sSnap.map = gSaveBlock1.location.mapGroup * 256 + gSaveBlock1.location.mapNum;
     sSnap.wx = sSnap.posX * 16 + (s8)((IoRead(0x014) - sSnap.xTile * 8) & 0xFF);
     sSnap.wy = sSnap.posY * 16 + (s8)((IoRead(0x016) - sSnap.yTile * 8) & 0xFF);
     FrameOrigin();
     sSnap.valid = 1;
+    if (getenv("PKR_VIEW_LOG"))
+        fprintf(stderr, "[view] f=%u pos=%d,%d tile=%d,%d scroll=%d,%d w=%d,%d map=%d.%d\n", Port_FrameCounter(), sSnap.posX, sSnap.posY,
+                sSnap.xTile, sSnap.yTile, IoRead(0x014), IoRead(0x016), sSnap.wx, sSnap.wy, gSaveBlock1.location.mapGroup, gSaveBlock1.location.mapNum);
 }
 
 static inline u16 *WideEntry(int bg, int tx, int ty)
@@ -114,6 +120,15 @@ static void FillWorld(void)
     const int my0 = top >> 4, my1 = (top + PORT_WIDE_H - 1) >> 4;
     const u16 *game[4];
     int mx, my, b;
+
+    /* Drawn a frame after the snapshot: when the player crossed into the
+     * next map meanwhile (Route 101 -> Oldale), the map data is the new
+     * map's in other coordinates; the snapshot (and the game's tilemap)
+     * still the old ones. Look the blocks up shifted (gCamera: old - new
+     * position) - else that frame showed shifted houses, Mike's flash at
+     * every map change. */
+    const int curMap = gSaveBlock1.location.mapGroup * 256 + gSaveBlock1.location.mapNum;
+    const int shiftX = curMap != sSnap.map ? -gCamera.x : 0, shiftY = curMap != sSnap.map ? -gCamera.y : 0;
 
     for (b = 1; b <= 3; b++)
         game[b] = (const u16 *)(gHostVram + ((IoRead(0x008 + b * 2) >> 8) & 0x1F) * 0x800u);
@@ -136,7 +151,7 @@ static void FillWorld(void)
                     t[b][3] = game[b][((gy + 1) & 31) * 32 + ((gx + 1) & 31)];
                 }
             } else {
-                PortMetatileTilesWide(mx, my, t[1], t[2], t[3]);
+                PortMetatileTilesWide(mx + shiftX, my + shiftY, t[1], t[2], t[3]);
             }
             for (b = 1; b <= 3; b++) {
                 *WideEntry(b, tx, ty) = t[b][0];
