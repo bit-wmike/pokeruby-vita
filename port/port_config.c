@@ -28,6 +28,8 @@ static void Set(const char *key, int v)
         gPortConfig.gen3Wild = v != 0;
     else if (!strcmp(key, "wild_doubles") && (v == 0 || v == 30 || v == 50))
         gPortConfig.wildDoubles = v;
+    else if (!strcmp(key, "run_indoors"))   /* kept like the EP bonus (Mike, 0.3.6) */
+        gPortCheats.runIndoors = v != 0;
     else {
         int i;
         for (i = 0; i < PORT_BTN_COUNT; i++)
@@ -73,9 +75,10 @@ void Port_ConfigSave(void)
                      "only_hoenn = %d\n"
                      "exp_multiplier = %d\n"
                      "turbo = %d\n"
-                     "wild_doubles = %d\n",
+                     "wild_doubles = %d\n"
+                     "run_indoors = %d\n",
                      gPortConfig.viewMode, gPortConfig.displayStyle, gPortConfig.frameRate30, gPortConfig.gen3Wild,
-                     gPortConfig.expMult, gPortConfig.turbo, gPortConfig.wildDoubles);
+                     gPortConfig.expMult, gPortConfig.turbo, gPortConfig.wildDoubles, gPortCheats.runIndoors);
     /* buttons: 0 none, 1 A, 2 B, 3 START, 4 SELECT, 5 L, 6 R */
     for (i = 0; i < PORT_BTN_COUNT; i++)
         n += snprintf(buf + n, sizeof(buf) - (size_t)n, "%s = %d\n", gPortBtnNames[i], gPortConfig.keymap[i]);
