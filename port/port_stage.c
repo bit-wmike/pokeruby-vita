@@ -49,6 +49,10 @@
 #define FH 160
 #define FX0 40
 #define FY 56
+/* the battle boxes sit this much higher than the GBA's band (0.2.10): the
+ * back sprites' art ends 1-2 lines above the band, the boxes now close that
+ * gap (Mike) */
+#define BOX_LIFT 4
 #define SX(gx) (((gx) + FX0) * 3 / 2)
 #define SY(gy) ((gy) * 3 / 2 + FY)
 /* backdrop key (alpha 0): the stage's mean colour with low bits no palette
@@ -515,7 +519,7 @@ static void PlanUi(void)
                 sUiDy[i] = 8 - 16;
             } else {
                 sUiDx[i] = (s16)(W - 8 - 230);
-                sUiDy[i] = (s16)(SY(112) - 6 - 110);
+                sUiDy[i] = (s16)(SY(112) - 6 - 110 - BOX_LIFT);   /* same gap over the lifted boxes */
             }
         } else if (PortView_SpriteInWindow(i)) {
             sUiObj[i] = 1;
@@ -835,6 +839,14 @@ void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
     f.nparts = sNPart;
     f.fadeColor = white ? 0xFFFFFFFFu : 0xFF000000u;
     f.fade = fade > 255 ? 255 : fade;
+    if (!gPortDexPage) {   /* the GBA hides everything under its text band: so do we
+                            * (else e.g. the lower rows of a back sprite flicker
+                            * below the boxes when it moves - Mike's grey bar) */
+        u32 *fl = (u32 *)field;
+        for (y = 112; y < FH; y++)
+            for (x = 0; x < FW; x++)
+                fl[y * fpitch + x] &= 0x00FFFFFFu;
+    }
     f.field = field;
     f.fieldPitch = fpitch;
     f.fieldW = FW;

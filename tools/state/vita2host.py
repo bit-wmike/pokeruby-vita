@@ -35,7 +35,7 @@ def main():
     # by one delta, writable data (from .data on) by another
     delta = int(sys.argv[sys.argv.index('--delta') + 1], 16) if '--delta' in sys.argv else 0xB000
     ddelta = int(sys.argv[sys.argv.index('--ddelta') + 1], 16) if '--ddelta' in sys.argv else 0xF0000
-    V = [x for x in syms(velf, '/usr/local/vitasdk/bin/arm-vita-eabi-nm') if 0x81000000 <= x[0] < 0x82000000 and x[2] not in 'aA']
+    V = [x for x in syms(velf, '/usr/local/vitasdk/bin/arm-vita-eabi-nm') if 0x81000000 <= x[0] < 0x83000000 and x[2] not in 'aA']
     hnm = 'arm-linux-gnueabihf-nm' if '--arm' in sys.argv else 'nm'
     hobjcopy = 'arm-linux-gnueabihf-objcopy' if '--arm' in sys.argv else 'objcopy'
     H = syms(hbin, hnm)
@@ -86,6 +86,21 @@ def main():
         out.append(bytearray(blocks[bi])); bi += 1
     out.append(bytearray(blocks[bi])); bi += 1   # HDMA state
     assert bi == nb
+    if '--delta' not in sys.argv:   # find the loader's shifts: most pointers land on symbol starts
+        vstarts_d = set(x[0] for x in V if x[2] in 'DdBb' and x[1] > 0)
+        vstarts_r = set(x[0] for x in V if x[2] in 'RrTt' and x[1] > 0)
+        words = []
+        for k in (0, 1, 6, 7, 8):
+            b = blocks[k]
+            words += [struct.unpack_from('<I', b, i)[0] for i in range(0, len(b) - 3, 4)]
+        words = [w for w in words if 0x81000000 <= w < 0x83000000]
+        def best(starts, odd):
+            c = {}
+            for d0 in range(-0x400000, 0x400000, 0x1000):
+                c[d0] = sum(1 for w in words if ((w & ~1) if odd else w) - d0 in starts)
+            return max(c, key=c.get)
+        delta, ddelta = best(vstarts_r, True), best(vstarts_d, False)
+        print(f'deltas: code {delta:#x}, data {ddelta:#x}', file=sys.stderr)
     # pointer translation
     vaddr = [s[0] for s in V]
     hsym_occ = {}

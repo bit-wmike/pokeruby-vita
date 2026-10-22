@@ -240,7 +240,7 @@ static void PlaceWindow(int hofs, int vofs, int c0, int c1, int r0, int r1)
         vdy = 0;
         hdx = (gx0 + gx1) / 2 < 80 ? 0 : (gx0 + gx1) / 2 > 160 ? ex : ex / 2;
     } else {              /* the rest: one block, bottom left */
-        vdy = ey;
+        vdy = ey - (gPortViewBattle ? 4 : 0);   /* battle: up to the back sprites (BOX_LIFT) */
         hdx = WIN_LEFT;
     }
     AddRegion(gx0 + hdx, gx1 + hdx, gy0 + vdy, gy1 + vdy, hdx, vdy);
