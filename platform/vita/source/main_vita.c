@@ -132,6 +132,7 @@ static void VideoInit(void)
         vita2d_texture_set_filters(sShadowTex, SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR);
     }
     sFont = vita2d_load_default_pgf();
+    VitaHq_Available();   /* compile the shaders now, not at the first battle (a pause on black) */
 }
 
 static int sCatchup; /* frames computed but not drawn (pacing) */

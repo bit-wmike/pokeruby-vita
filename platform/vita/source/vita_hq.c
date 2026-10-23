@@ -236,6 +236,7 @@ int VitaHq_Available(void)
     return 1;
 }
 
+extern float _vita2d_ortho_matrix[16];
 static void DrawWith(SceGxmFragmentProgram *prog, const SceGxmProgramParameter *texSize,
                      vita2d_texture *t, float x, float y, float sx, float sy, float w, float h, float scale)
 {
@@ -261,10 +262,15 @@ static void DrawWith(SceGxmFragmentProgram *prog, const SceGxmProgramParameter *
     v[2].x = x;  v[2].y = y1; v[2].z = 0.5f; v[2].u = u0; v[2].v = v1;
     v[3].x = x1; v[3].y = y1; v[3].z = 0.5f; v[3].u = u1; v[3].v = v1;
     vita2d_texture_set_filters(t, SCE_GXM_TEXTURE_FILTER_POINT, SCE_GXM_TEXTURE_FILTER_POINT);
+    /* never hide what is drawn after it (the battle text box, our healthbox
+     * lay under the field quad: Mike, 0.3.13) */
+    sceGxmSetFrontDepthFunc(ctx, SCE_GXM_DEPTH_FUNC_ALWAYS);
+    sceGxmSetFrontDepthWriteEnable(ctx, SCE_GXM_DEPTH_WRITE_DISABLED);
     sceGxmSetVertexProgram(ctx, sVp);
     sceGxmSetFragmentProgram(ctx, prog);
     sceGxmReserveVertexDefaultUniformBuffer(ctx, &buf);
-    sceGxmSetUniformDataF(buf, sWvp, 0, 16, wvp);
+    sceGxmSetUniformDataF(buf, sWvp, 0, 16, _vita2d_ortho_matrix);   /* as vita2d's own draws */
+    (void)wvp;
     sceGxmReserveFragmentDefaultUniformBuffer(ctx, &buf);
     sceGxmSetUniformDataF(buf, texSize, 0, 2, ts);
     sceGxmSetFragmentTexture(ctx, 0, &t->gxm_tex);
