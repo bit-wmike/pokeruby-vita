@@ -437,7 +437,13 @@ static u8 StartMenu_InputProcessCallback(void)
         if (gMenuCallback != StartMenu_SaveCallback &&
            gMenuCallback != StartMenu_ExitCallback &&
            gMenuCallback != StartMenu_RetireCallback)
+        {
+#ifdef PORT
+            extern void PortView_MenuFade(void);
+            PortView_MenuFade();   /* only the middle goes black (Mike, 0.3.12) */
+#endif
             FadeScreen(1, 0);
+        }
         return 0;
     }
     if (JOY_NEW(START_BUTTON | B_BUTTON))

@@ -143,6 +143,65 @@ static int sSnapValid, sBackdropOn;
 const uint32_t *PortStage_StageImage(void);
 int PortIsTitleScreen(void);
 
+/* A start menu screen (bag, party, Pokedex, ...) opens or closes: the
+ * game fades the whole screen to black and back. In the wide view only
+ * the middle (where the GBA sized screen comes) does; around it the scene
+ * goes over into the blurred backdrop - no black flash over the whole
+ * screen (Mike, 0.3.12). Set by src/start_menu.c, over when the scene is
+ * back unfaded or the map changed (Fly, Teleport, ...). */
+static int sMenuFade, sMenuFadeMap, sMenuFadeReady;
+int gPortMapId(void)
+{
+    return gSaveBlock1.location.mapGroup * 256 + gSaveBlock1.location.mapNum;
+}
+
+void PortView_MenuFade(void)
+{
+    sMenuFade = 1;
+    sMenuFadeReady = 0;
+    sMenuFadeMap = gPortMapId();
+}
+
+static void MakeBackdrop(const uint32_t *src, int pitch);
+
+static void MenuFadeFrame(void)
+{
+    const int W = PORT_WIDE_W, H = PORT_WIDE_H;
+    int fading = gPaletteFade.active || gPaletteFade.y, x, y, t;
+    if (!sMenuFade)
+        return;
+    if (gPortMapId() != sMenuFadeMap || !sSnapValid) {
+        sMenuFade = 0;
+        return;
+    }
+    if (!fading) {
+        if (sMenuFadeReady)   /* back in the scene, unfaded */
+            sMenuFade = 0;
+        return;
+    }
+    if (!sMenuFadeReady) {
+        MakeBackdrop(sSnap, W);
+        sMenuFadeReady = 1;
+    }
+    t = gPaletteFade.y * 16;   /* 0..256: how far towards black */
+    if (t > 256) t = 256;
+    for (y = 0; y < H; y++) {
+        uint32_t *row = sFrameBuffer + y * FRAME_MAX_W;
+        const uint32_t *a = sSnap + y * W, *b = sBackdrop + y * W;
+        int inY = y >= PORT_WIDE_OY && y < PORT_WIDE_OY + PORT_GBA_H;
+        for (x = 0; x < W; x++) {
+            uint32_t ca, cb;
+            if (inY && x >= PORT_WIDE_OX && x < PORT_WIDE_OX + PORT_GBA_W)
+                continue;
+            ca = a[x]; cb = b[x];
+            row[x] = 0xFF000000u |
+                     ((((ca >> 16) & 255) * (256 - t) + ((cb >> 16) & 255) * t) >> 8) << 16 |
+                     ((((ca >> 8) & 255) * (256 - t) + ((cb >> 8) & 255) * t) >> 8) << 8 |
+                     (((ca & 255) * (256 - t) + (cb & 255) * t) >> 8);
+        }
+    }
+}
+
 /* box blur (radius r) across and down, then dimmed */
 static void MakeBackdrop(const uint32_t *src, int pitch)
 {
@@ -373,6 +432,8 @@ static void RenderFrame(void)
     Port_ProfileEnd(PORT_PROF_RENDER);
     sRendering = 0;
 
+    if (wide)
+        MenuFadeFrame();
     if (!wide && gPortConfig.viewMode == PORT_VIEW_FULL && Port_EdgeFillScreen()) {
         /* a full screen picture of the GBA (the cave entry's rings): its
          * edges carried out to the whole wide screen, 1:1 like the field

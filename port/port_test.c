@@ -394,6 +394,20 @@ void PortTest_Frame(void)
         fprintf(stderr, "\n");
     }
 #endif
+    if (getenv("PKR_BAG_DUMP") && Port_FrameCounter() == (u32)atoi(getenv("PKR_BAG_DUMP"))) {
+        int PortBag_Get(int pocket, int k, unsigned short *item, unsigned short *qty);
+        void PortBag_Set(int pocket, int k, int qty);
+        void PortBag_Name(unsigned short item, char *out, int size);
+        int p, k;
+        unsigned short it, q;
+        char nm[48];
+        PortBag_Set(3, 0, 42);
+        for (p = 0; p < 4; p++)
+            for (k = 0; PortBag_Get(p, k, &it, &q); k++) {
+                PortBag_Name(it, nm, sizeof(nm));
+                fprintf(stderr, "[bag] %d %d %s x%u\n", p, k, nm, q);
+            }
+    }
     {   /* PKR_WEATHER=frame:id: the field weather (rain, ash, ...) */
         static int wf = -2, wid;
         if (wf == -2) {

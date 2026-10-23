@@ -496,6 +496,36 @@ static void Build(void)
         }
     }
 
+#ifndef __vita__
+    if (sDark && getenv("PKR_CAVE_ROCKS")) {   /* mock-up: the intro's rocks at the horizon */
+        static u32 rk[256 * 64];
+        int rw = 0, rh = 0, rows = getenv("PKR_CAVE_ROWS") ? atoi(getenv("PKR_CAVE_ROWS")) : 1, r;
+        FILE *f = fopen(getenv("PKR_CAVE_ROCKS"), "rb");
+        if (f && fscanf(f, "P6 %d %d 255", &rw, &rh) == 2 && rw <= 256 && rh <= 64) {
+            fgetc(f);
+            for (i = 0; i < rw * rh; i++) {
+                int R = fgetc(f), G = fgetc(f), B = fgetc(f);
+                rk[i] = (R == 255 && G == 0 && B == 255) ? 0 : 0xFF000000u | (B << 16) | (G << 8) | R;
+            }
+            for (r = rows - 1; r >= 0; r--) {   /* back row first */
+                float sc = r ? 1.0f : 1.5f;
+                int base = HOR + (r ? -10 : 8), shade = r ? 120 : 30, off = r ? 97 : 0;
+                int dh = (int)(rh * sc);
+                for (y = 0; y < dh; y++) {
+                    int yy = base - dh + y, sy = (int)(y / sc);
+                    if (yy < 0 || yy >= H) continue;
+                    for (x = 0; x < W; x++) {
+                        int sx = ((int)((x + off) / sc)) % rw;
+                        u32 c = rk[sy * rw + sx];
+                        if (c >> 24)
+                            sStage[yy][x] = Mix(c, 0xFF000000u, shade);
+                    }
+                }
+            }
+        }
+        if (f) fclose(f);
+    } else
+#endif
     if (sDark)
         CaveWalls();
 
@@ -685,6 +715,8 @@ static int sRegCount;
 /* Where the text windows (BG0 regions) and the sprites of the windows and
  * the healthboxes go in the wide frame; they are drawn GBA sized (UI pass)
  * and copied there. */
+static void ObjBox(int i, int *x, int *y, int *w, int *h);
+
 static void PlanUi(void)
 {
     int i;
@@ -694,6 +726,24 @@ static void PlanUi(void)
     gPortViewBattle = 0;
     sRegCount = virtuappu_mode1_bg_region_count[0];
     memcpy(sReg, virtuappu_mode1_bg_regions[0], sizeof(sReg[0]) * sRegCount);
+    /* the foes' boxes as a block 8 px from the left edge, ours 8 px from
+     * the right one (double battles: the second foe's box lies further
+     * left on the GBA - its edge was cut off; Mike, 0.3.12) */
+    int minL = 13, maxR = 230, minT = 16;
+    for (i = 0; i < 128; i++) {
+        int ox, oy, ow, oh;
+        if (!IsHud(i))
+            continue;
+        ObjBox(i, &ox, &oy, &ow, &oh);
+        if (ow <= 0)
+            continue;
+        if (gPortOamX[i] < PORT_GBA_W / 2) {
+            if (ox < minL) minL = ox;
+            if (oy < minT && oy > -32) minT = oy;
+        } else if (ox + ow > maxR && ox + ow <= PORT_GBA_W + 16) {
+            maxR = ox + ow;
+        }
+    }
     for (i = 0; i < 128; i++) {
         sUiObj[i] = 0;
         if (IsHud(i)) {
@@ -701,10 +751,10 @@ static void PlanUi(void)
              * text windows */
             sUiObj[i] = 1;
             if (gPortOamX[i] < PORT_GBA_W / 2) {
-                sUiDx[i] = 8 - 13;
-                sUiDy[i] = 8 - 16;
+                sUiDx[i] = (s16)(8 - minL);
+                sUiDy[i] = (s16)(8 - minT);
             } else {
-                sUiDx[i] = (s16)(W - 8 - 230);
+                sUiDx[i] = (s16)(W - 8 - maxR);
                 sUiDy[i] = (s16)(SY(112) - 6 - 110 - BOX_LIFT);   /* same gap over the lifted boxes */
             }
         } else if (PortView_SpriteInWindow(i)) {

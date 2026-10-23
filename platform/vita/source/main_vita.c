@@ -503,9 +503,9 @@ int Port_StateExists(void);
 void PortCheat_MaxMoney(void);
 
 enum {
-    MI_H_DISPLAY, MI_VIEW, MI_STYLE, MI_FPS,
+    MI_H_DISPLAY, MI_STYLE, MI_FPS,
     MI_H_GAME, MI_HOENN, MI_DOUBLES, MI_TURBO,
-    MI_H_CHEATS, MI_EXP, MI_MONEY, MI_ENC, MI_SHINY, MI_RANDOM, MI_FLEE, MI_RUN,
+    MI_H_CHEATS, MI_EXP, MI_BAG, MI_MONEY, MI_ENC, MI_SHINY, MI_RANDOM, MI_FLEE, MI_RUN,
     MI_H_STATE, MI_SAVE, MI_LOAD,
     MI_BACK,
     MI_H_KEYS, MI_K0, MI_K7 = MI_K0 + PORT_BTN_COUNT - 1,   /* right column */
@@ -522,7 +522,6 @@ static int sConfirm = -1;   /* save/load state: asked once more (X yes, O no) */
 
 static void MenuLine(int item, char *buf, size_t size)
 {
-    static const char *views[] = {"GBA (240x160)", "Weitsicht (480x272)"};
     static const char *enc[] = {"Aus", "Normal", "Hoch"};
     const char *onoff[] = {"Aus", "An"};
     if (item >= MI_K0 && item <= MI_K7) {
@@ -533,7 +532,6 @@ static void MenuLine(int item, char *buf, size_t size)
     }
     switch (item) {
         case MI_H_DISPLAY: snprintf(buf, size, "ANZEIGE"); break;
-        case MI_VIEW: snprintf(buf, size, "Ansicht: %s", views[gPortConfig.viewMode]); break;
         case MI_STYLE: snprintf(buf, size, "Bilddarstellung: %s",
                                 gPortConfig.displayStyle == PORT_STYLE_HQ ? "HQ (geglaettet)" : "Pixelgenau"); break;
         case MI_FPS: snprintf(buf, size, "Bildrate: %s", gPortConfig.frameRate30 ? "30 (Spieltempo bleibt)" : "60"); break;
@@ -545,6 +543,7 @@ static void MenuLine(int item, char *buf, size_t size)
         case MI_H_CHEATS: snprintf(buf, size, "CHEATS (bis zum Beenden, EP bleibt gespeichert)"); break;
         case MI_EXP: snprintf(buf, size, "EP-Bonus: %dx", gPortConfig.expMult); break;
         case MI_MONEY: snprintf(buf, size, "Geld auf Maximum setzen"); break;
+        case MI_BAG: snprintf(buf, size, "Rucksack: Anzahl der Items aendern ..."); break;
         case MI_ENC: snprintf(buf, size, "Begegnungsrate: %s", enc[gPortCheats.encounters]); break;
         case MI_SHINY: snprintf(buf, size, "Hohe Shiny-Chance (1:32): %s", onoff[gPortCheats.shiny]); break;
         case MI_RANDOM: snprintf(buf, size, "Zufalls-Pokemon: %s", onoff[gPortCheats.randomSpecies]); break;
@@ -564,6 +563,80 @@ static int Wrap(int v, int d, int n)
     return (v + d + n) % n;
 }
 
+/* The Rucksack editor (Mike, 0.3.12): only the numbers of the items one
+ * has, 1..99; no new items, nothing removed. The game is paused (menu). */
+int PortBag_Get(int pocket, int k, unsigned short *item, unsigned short *qty);
+void PortBag_Set(int pocket, int k, int qty);
+void PortBag_Name(unsigned short item, char *out, int size);
+
+static void RunBag(void)
+{
+    static const char *pockets[4] = {"Items", "Baelle", "TM/VM", "Beeren"};
+    int pocket = 0, sel = 0, top = 0;
+    unsigned prev = ~0u;
+    for (;;) {
+        SceCtrlData pad;
+        unsigned pressed, it, q;
+        int n = 0, i, y, d = 0;
+        unsigned short item, qty;
+        char name[48], line[96];
+        while (PortBag_Get(pocket, n, &item, &qty))
+            n++;
+        sceCtrlPeekBufferPositive(0, &pad, 1);
+        pressed = pad.buttons & ~prev;
+        prev = pad.buttons;
+        if (pressed & (SCE_CTRL_CIRCLE | SCE_CTRL_START))
+            break;
+        if (pressed & SCE_CTRL_TRIANGLE) {
+            pocket = (pocket + 1) % 4;
+            sel = top = 0;
+            continue;
+        }
+        if (n > 0) {
+            if (pressed & SCE_CTRL_UP) sel = (sel + n - 1) % n;
+            if (pressed & SCE_CTRL_DOWN) sel = (sel + 1) % n;
+            if (pressed & SCE_CTRL_LEFT) d = -1;
+            if (pressed & SCE_CTRL_RIGHT) d = 1;
+            if (pressed & SCE_CTRL_LTRIGGER) d = -10;
+            if (pressed & SCE_CTRL_RTRIGGER) d = 10;
+            if (sel >= n) sel = n - 1;
+            if (d && PortBag_Get(pocket, sel, &item, &qty))
+                PortBag_Set(pocket, sel, qty + d);
+        }
+        if (sel < top) top = sel;
+        if (sel >= top + 20) top = sel - 19;
+
+        vita2d_pool_reset();
+        DrawGame();
+        vita2d_draw_rectangle(0, 0, 960, 544, RGBA8(0, 0, 0, 210));
+        vita2d_pgf_draw_text(sFont, 60, 44, RGBA8(90, 160, 255, 255), 1.2f, "Rucksack");
+        for (i = 0; i < 4; i++)
+            vita2d_pgf_draw_text(sFont, 260 + i * 130, 44, i == pocket ? RGBA8(255, 230, 80, 255) : RGBA8(150, 150, 150, 255),
+                                 0.9f, pockets[i]);
+        if (n == 0)
+            vita2d_pgf_draw_text(sFont, 90, 96, RGBA8(220, 220, 220, 255), 0.85f, "(nichts in dieser Tasche)");
+        for (i = top, y = 96; i < n && i < top + 20; i++, y += 20) {
+            if (!PortBag_Get(pocket, i, &item, &qty))
+                break;
+            it = item; q = qty;
+            PortBag_Name((unsigned short)it, name, sizeof(name));
+            snprintf(line, sizeof(line), "%s", name);
+            vita2d_pgf_draw_text(sFont, 90, y, i == sel ? RGBA8(255, 230, 80, 255) : RGBA8(220, 220, 220, 255), 0.85f, line);
+            snprintf(line, sizeof(line), "x %u", q);
+            vita2d_pgf_draw_text(sFont, 420, y, i == sel ? RGBA8(255, 230, 80, 255) : RGBA8(220, 220, 220, 255), 0.85f, line);
+            if (i == sel)
+                vita2d_pgf_draw_text(sFont, 70, y, RGBA8(255, 230, 80, 255), 0.85f, ">");
+        }
+        vita2d_pgf_draw_text(sFont, 60, 530, RGBA8(150, 150, 150, 255), 0.8f,
+                             "Hoch/Runter: Item   Links/Rechts: -1/+1   L/R: -10/+10   Dreieck: Tasche   O: zurueck");
+        vita2d_end_drawing();
+        vita2d_wait_rendering_done();
+        vita2d_swap_buffers();
+        sceDisplayWaitVblankStart();
+    }
+    Platform_Log("[ui] bag edited\n");
+}
+
 /* Changes an item (d -1/+1: left/right, 0: X); returns 1 when the menu
  * should close. */
 static int MenuChange(int item, int d)
@@ -574,7 +647,6 @@ static int MenuChange(int item, int d)
         return 0;
     }
     switch (item) {
-        case MI_VIEW: gPortConfig.viewMode = Wrap(gPortConfig.viewMode, d ? d : 1, 2); break;
         case MI_STYLE:
             if (gPortConfig.displayStyle == PORT_STYLE_HQ) {
                 gPortConfig.displayStyle = PORT_STYLE_PIXEL;
@@ -601,6 +673,15 @@ static int MenuChange(int item, int d)
             gPortConfig.expMult = steps[Wrap(k, d ? d : 1, 4)];
             break;
         }
+        case MI_BAG:
+            if (d == 0) {
+                int PortIsOverworld(void);
+                if (!PortIsOverworld())
+                    snprintf(sMenuNote, sizeof(sMenuNote), "Rucksack nur in der Oberwelt");
+                else
+                    RunBag();
+            }
+            break;
         case MI_MONEY:
             if (d == 0) {
                 PortCheat_MaxMoney();
@@ -648,7 +729,7 @@ static int MenuChange(int item, int d)
 
 static void RunMenu(void)
 {
-    static int sel = MI_VIEW;
+    static int sel = MI_STYLE;
     unsigned prev = ~0u;
     char line[160];
 
