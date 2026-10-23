@@ -79,6 +79,7 @@ static const char sScale3xSrc[] =
     "    float4 G = tex2D(tex, c + float2(-1.0f,  1.0f) * ps);\n"
     "    float4 H = tex2D(tex, c + float2( 0.0f,  1.0f) * ps);\n"
     "    float4 I = tex2D(tex, c + float2( 1.0f,  1.0f) * ps);\n"
+    "    if (E.a > 0.5f && E.a < 0.999f) return float4(E.rgb, 1.0f);\n"
     "    float4 o = E;\n"
     "    if (!eq(B, H) && !eq(D, F)) {\n"
     "        if (s.y < 0.5f) {\n"

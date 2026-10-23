@@ -150,6 +150,7 @@ int PortIsTitleScreen(void);
  * screen (Mike, 0.3.12). Set by src/start_menu.c, over when the scene is
  * back unfaded or the map changed (Fly, Teleport, ...). */
 static int sMenuFade, sMenuFadeMap, sMenuFadeReady;
+static int sFromBattle;   /* the last wide frame was a battle */
 int gPortMapId(void)
 {
     return gSaveBlock1.location.mapGroup * 256 + gSaveBlock1.location.mapNum;
@@ -283,8 +284,16 @@ static void RenderFrame(void)
             Platform_SetBackdrop(NULL);
         sBackdropOn = sSnapValid = 0;
     } else if (!wide && !stage) {
-        /* a GBA sized screen after the wide scene: the scene behind it */
-        if (lastKind == 1 && sSnapValid) {
+        /* a GBA sized screen after the wide scene: the scene behind it -
+         * but not while a battle is set up or the field comes back after
+         * one: the screen is black then, all of it (Mike, 0.3.14) */
+        extern void CB2_InitBattle(void), CB2_ReturnToFieldLocal(void), CB2_ReturnToField(void);
+        if (gMain.callback2 == CB2_InitBattle ||
+            (sFromBattle && (gMain.callback2 == CB2_ReturnToFieldLocal || gMain.callback2 == CB2_ReturnToField))) {
+            if (sBackdropOn)
+                Platform_SetBackdrop(NULL);
+            sBackdropOn = 0;
+        } else if (lastKind == 1 && sSnapValid) {
             MakeBackdrop(sSnap, PORT_WIDE_W);
             Platform_SetBackdrop(sBackdrop);
             sBackdropOn = 1;
@@ -310,6 +319,8 @@ static void RenderFrame(void)
         wasFading = fading;
     }
     lastKind = stage ? 2 : wide ? 1 : 0;
+    if (stage || wide)
+        sFromBattle = stage;
     if (stage)
         wide = 1;
     width = wide ? PORT_WIDE_W : PORT_GBA_W;
@@ -434,6 +445,21 @@ static void RenderFrame(void)
 
     if (wide)
         MenuFadeFrame();
+    if (wide) {   /* a battle transition ended black: all of the screen, not a
+                   * black box in the scene (Mike, 0.3.14) */
+        extern int PortBattleTransitionActive(void);
+        extern void CB2_InitBattle(void);
+        int x, y, black = PortBattleTransitionActive() || gMain.callback2 == CB2_InitBattle;
+        for (y = PORT_WIDE_H / 2 - 50; y < PORT_WIDE_H / 2 + 50 && black; y += 4)
+            for (x = PORT_WIDE_W / 2 - 80; x < PORT_WIDE_W / 2 + 80; x += 4)
+                if (sFrameBuffer[y * FRAME_MAX_W + x] & 0x00F8F8F8u) {
+                    black = 0;
+                    break;
+                }
+        if (black)
+            for (y = 0; y < PORT_WIDE_H; y++)
+                memset(sFrameBuffer + y * FRAME_MAX_W, 0, PORT_WIDE_W * 4);
+    }
     if (!wide && gPortConfig.viewMode == PORT_VIEW_FULL && Port_EdgeFillScreen()) {
         /* a full screen picture of the GBA (the cave entry's rings): its
          * edges carried out to the whole wide screen, 1:1 like the field

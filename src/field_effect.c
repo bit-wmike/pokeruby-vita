@@ -2161,6 +2161,15 @@ void sub_80883DC(void);
 void sub_808843C(u16);
 void sub_8088890(struct Sprite *);
 
+#ifdef PORT
+/* port/port_view.c: the field move's mon picture band is placed in the
+ * middle of the wide frame, across its width (Mike, 0.3.14) */
+int PortFieldMoveShowMonActive(void)
+{
+    return FuncIsActiveTask(sub_8088120) || FuncIsActiveTask(sub_808847C);
+}
+#endif
+
 bool8 FldEff_FieldMoveShowMon(void)
 {
     u8 taskId;

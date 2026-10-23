@@ -329,6 +329,7 @@ static void PlaceWindow(int hofs, int vofs, int c0, int c1, int r0, int r1)
 
 struct Rect { int c0, c1, r0, r1; };
 
+int PortFieldMoveShowMonActive(void);
 void PortView_PlaceWindows(void)
 {
     const u16 cnt = IoRead(0x008);
@@ -395,6 +396,24 @@ void PortView_PlaceWindows(void)
         }
     }
     (void)seen; (void)merged; (void)j;
+    if (PortFieldMoveShowMonActive()) {   /* the field move band: centred, full width */
+        const int ex = PORT_WIDE_W - PORT_GBA_W, ey = PORT_WIDE_H - PORT_GBA_H;
+        for (i = 0; i < nrect; i++) {
+            int gy0 = rect[i].r0 * 8 - (vofs & 7), gy1 = (rect[i].r1 + 1) * 8 - (vofs & 7);
+            if (gy0 < 0) gy0 = 0;
+            if (gy1 > PORT_GBA_H) gy1 = PORT_GBA_H;
+            if (gy0 >= gy1)
+                continue;
+            AddRegion(0, PORT_WIDE_W, gy0 + ey / 2, gy1 + ey / 2, ex / 2, ey / 2);
+            if (sWinCount < 16) {
+                sWin[sWinCount].x0 = -64; sWin[sWinCount].x1 = PORT_GBA_W + 64;
+                sWin[sWinCount].y0 = gy0; sWin[sWinCount].y1 = gy1;
+                sWin[sWinCount].dx = ex / 2; sWin[sWinCount].dy = ey / 2;
+                sWinCount++;
+            }
+        }
+        return;
+    }
     for (i = 0; i < nrect; i++) {
 #ifndef __vita__
         if (getenv("PKR_DUMP_BG0") && Port_FrameCounter() == (u32)atoi(getenv("PKR_DUMP_BG0")))
@@ -482,6 +501,10 @@ int PortView_BeginFrame(void)
     virtuappu_mode1_win_dx = ox;
     virtuappu_mode1_win_dy = oy;
     virtuappu_mode1_line_dy = oy;
+    if (PortFieldMoveShowMonActive()) {   /* its window: the middle of the frame */
+        virtuappu_mode1_win_dx = (PORT_WIDE_W - PORT_GBA_W) / 2;
+        virtuappu_mode1_win_dy = (PORT_WIDE_H - PORT_GBA_H) / 2;
+    }
 
     virtuappu_mode1_obj_port = 1;
     for (i = 0; i < 128; i++) {

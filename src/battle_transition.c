@@ -543,6 +543,13 @@ void BattleTransition_Start(u8 transitionID)
 #define tTransitionID   data[1]
 #define tTransitionDone data[15]
 
+#ifdef PORT
+int PortBattleTransitionActive(void)
+{
+    return FindTaskIdByFunc(Task_BattleTransitionMain) != 0xFF;
+}
+#endif
+
 bool8 IsBattleTransitionDone(void)
 {
     u8 taskID = FindTaskIdByFunc(Task_BattleTransitionMain);

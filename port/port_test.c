@@ -375,6 +375,12 @@ void PortTest_Frame(void)
         fprintf(stderr, "[pos] %u map %d.%d (%d,%d)\n", Port_FrameCounter(), gSaveBlock1.location.mapGroup,
                 gSaveBlock1.location.mapNum, gSaveBlock1.pos.x, gSaveBlock1.pos.y);
     TestWarp();
+    if (getenv("PKR_SHOWMON") && Port_FrameCounter() == (u32)atoi(getenv("PKR_SHOWMON"))) {
+        extern u32 gFieldEffectArguments[];
+        u8 FieldEffectStart(u8);
+        gFieldEffectArguments[0] = 0;
+        FieldEffectStart(59);   /* FLDEFF_FIELD_MOVE_SHOW_MON_INIT */
+    }
     TestMoves();
 #ifndef __vita__
     if (getenv("PKR_OAM_WX") && Port_FrameCounter() % 30 == 0 && Port_FrameCounter() >= (u32)atoi(getenv("PKR_OAM_WX"))) {

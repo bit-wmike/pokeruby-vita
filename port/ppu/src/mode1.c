@@ -412,9 +412,9 @@ static uint32_t mode1_alpha_blend(uint32_t top_abgr, uint32_t bottom_abgr, int e
     /* the port's keyed backdrop (alpha 0: the stage shows there): on top it
      * stays as it is; below, the top colour comes out partly transparent
      * so the stage blends in instead of the backdrop colour (Surf) */
-    if (!(top_abgr >> 24u))
+    if (virtuappu_mode1_backdrop_key && !(top_abgr >> 24u))
         return top_abgr;
-    if (!(bottom_abgr >> 24u)) {
+    if (virtuappu_mode1_backdrop_key && !(bottom_abgr >> 24u)) {
         if (evb == 0 || eva >= 16)
             return top_abgr;
         return (top_abgr & 0x00FFFFFFu) | ((uint32_t)(eva >= 16 ? 255 : eva * 16) << 24u);
@@ -449,7 +449,7 @@ static uint32_t mode1_alpha_blend(uint32_t top_abgr, uint32_t bottom_abgr, int e
 }
 
 static uint32_t mode1_brighten(uint32_t abgr, int evy) {
-    if (!(abgr >> 24u))   /* the port's keyed backdrop (the stage shows there): no effect */
+    if (virtuappu_mode1_backdrop_key && !(abgr >> 24u))   /* the port's keyed backdrop (battle stage): no effect */
         return abgr;
     /* GBA brightness-increase on 5-bit channels (GBATEK):
      * I = I + (31-I)*evy/16, truncating; evy already clamped 0..16. */
@@ -475,7 +475,7 @@ static uint32_t mode1_brighten(uint32_t abgr, int evy) {
 }
 
 static uint32_t mode1_darken(uint32_t abgr, int evy) {
-    if (!(abgr >> 24u))   /* the port's keyed backdrop (the stage shows there): no effect */
+    if (virtuappu_mode1_backdrop_key && !(abgr >> 24u))   /* the port's keyed backdrop (battle stage): no effect */
         return abgr;
     /* GBA brightness-decrease on 5-bit channels (GBATEK):
      * I = I - I*evy/16, truncating; evy already clamped 0..16. */
@@ -591,9 +591,9 @@ static const uint8_t* mode1_prepare_blend_lut(int eva, int evb) {
 }
 
 static inline uint32_t mode1_alpha_blend_lut(const uint8_t* lut, uint32_t top_abgr, uint32_t bottom_abgr) {
-    if (!(top_abgr >> 24u))   /* keyed backdrop: see mode1_alpha_blend */
+    if (virtuappu_mode1_backdrop_key && !(top_abgr >> 24u))   /* keyed backdrop: see mode1_alpha_blend */
         return top_abgr;
-    if (!(bottom_abgr >> 24u)) {
+    if (virtuappu_mode1_backdrop_key && !(bottom_abgr >> 24u)) {
         /* eva from the table: top 31 over bottom 0 gives 31*eva/16 */
         int eva = (lut[(31u << 5u) | 0u] * 16 + 30) / 31;
         if (eva >= 16)

@@ -872,9 +872,12 @@ static void PlanUi(void)
 /* BG1/BG2 across the whole width: the intro scenery, and the moves'
  * pictures on them (backgrounds, sand, waves, ...) unless a battler's
  * picture is there (Mike, 0.3.3) */
+static int sFillWas[4], sFillNow[4];
 static int Wide(int b)
 {
     if (gPortDexPage)   /* the caught Pokemon's dex page: GBA sized (Mike, 0.3.11) */
+        return 0;
+    if (sFillWas[b])   /* a full picture: the fill pass mirrors it at the sides (Mike, 0.3.14) */
         return 0;
     if (b == 3)
         return 1;
@@ -1035,6 +1038,8 @@ int PortStage_BgFillPass(int *h)
     int full[4] = {0, 0, 0, 0}, any = 0;
     extern u8 gHostIo[], gHostVram[];
     sFill = 0;
+    memcpy(sFillWas, sFillNow, sizeof(sFillWas));
+    memset(sFillNow, 0, sizeof(sFillNow));
     if (gPortDexPage || gPortBattleIntro)
         return 0;
     /* a picture over the whole GBA screen on BG1 / BG2 (backgrounds of
@@ -1049,7 +1054,7 @@ int PortStage_BgFillPass(int *h)
             for (tx = 0; tx < 30; tx++)
                 n += (map[ty * 32 + tx] & 0x3FF) != 0;
         if (n >= 540)
-            full[b] = any = 1;
+            full[b] = any = sFillNow[b] = 1;
     }
     if (!any)
         return 0;
@@ -1095,7 +1100,13 @@ void PortStage_SetBgFillPixels(const u32 *pix, int pitch)
             gy = BGFILL_H - 1 - BGFILL_DY;
         r = pix + (gy + BGFILL_DY) * pitch;
         for (x = 0; x < W; x++) {
-            u32 c = r[(x * 2 + 1) / 3];
+            int fx = (x * 2 + 1) / 3;   /* beside the GBA picture: mirrored */
+            u32 c;
+            if (fx < FX0)
+                fx = 2 * FX0 - 1 - fx;
+            else if (fx >= FX0 + PORT_GBA_W)
+                fx = 2 * (FX0 + PORT_GBA_W) - 1 - fx;
+            c = r[fx];
             sFillStage[y][x] = (c >> 24) == 0xFF ? c : (c >> 24) ? Mix(sStageW[y][x], c | 0xFF000000u, (int)(c >> 24))
                                                                 : sStageW[y][x];
         }
@@ -1419,7 +1430,7 @@ static int Shadows(void)
         if (id >= MAX_SPRITES)
             continue;
         sp = &gSprites[id];
-        if (!sp->inUse || sp->invisible)
+        if (!sp->inUse || sp->invisible || (sp->oam.affineMode && gOamMatrices[sp->oam.matrixNum].a < 0xE0))   /* growing from / into the ball */
             continue;
         gy = GetBattlerSpriteCoord(b, 1) + (foe ? 34 : 30);
         sShadow[n].cx = (int16_t)SX(sp->x + sp->x2);
@@ -1433,6 +1444,46 @@ static int Shadows(void)
         for (b = 0; b < n; b++) fprintf(stderr, "[shadow] f%u %d,%d\n", Port_FrameCounter(), sShadow[b].cx, sShadow[b].cy);
 #endif
     return n;
+}
+
+/* trainers' pictures keep their pixels (no Scale3x on faces: Mike, 0.3.14):
+ * their opaque pixels in the field get alpha 0xFE, the shader leaves those */
+extern const union AnimCmd *const *const gUnknown_081EC2A4[], *const *const gUnknown_081ECACC[];
+static int IsTrainerPic(const struct Sprite *sp)
+{
+    int i;
+    for (i = 0; i < 3; i++)
+        if (sp->anims == gUnknown_081ECACC[i])
+            return 1;
+    for (i = 0; i < 94; i++)
+        if (sp->anims == gUnknown_081EC2A4[i])
+            return 1;
+    return 0;
+}
+
+static int gMarked;
+static void MarkTrainers(u32 *fl, int fpitch)
+{
+    extern u8 gHostVram[];
+    int i, x, y;
+    for (i = 0; i < MAX_SPRITES; i++) {
+        const struct Sprite *sp = &gSprites[i];
+        int x0, y0;
+        if (!sp->inUse || sp->invisible || !IsTrainerPic(sp))
+            continue;
+        x0 = sp->x + sp->x2 + sp->centerToCornerVecX + FX0;
+        y0 = sp->y + sp->y2 + sp->centerToCornerVecY;
+        for (y = 0; y < 64; y++)
+            for (x = 0; x < 64; x++) {
+                int fx = x0 + x, fy = y0 + y, tx = !sp->oam.affineMode && (sp->oam.matrixNum & 8) ? 63 - x : x, t, b;
+                if (fx < 0 || fy < 0 || fx >= FW || fy >= 112)
+                    continue;
+                t = sp->oam.tileNum + (y / 8) * 8 + tx / 8;
+                b = gHostVram[0x10000 + (t & 1023) * 32 + (y & 7) * 4 + (tx & 7) / 2];
+                if (((tx & 1) ? b >> 4 : b & 15) && (fl[fy * fpitch + fx] >> 24) == 0xFF)
+                    fl[fy * fpitch + fx] &= 0xFEFFFFFFu, gMarked++;
+            }
+    }
 }
 
 void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
@@ -1514,6 +1565,14 @@ void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
     f.nshadows = Shadows();
     f.fadeColor = white ? 0xFFFFFFFFu : 0xFF000000u;
     f.fade = fade > 255 ? 255 : fade;
+    {   /* the GBA screen blanked (the battle being set up): all of it black,
+         * not a black box on the stage (Mike, 0.3.14) */
+        extern u8 gHostIo[];
+        if (gHostIo[0] & 0x80) {
+            f.fadeColor = 0xFF000000u;
+            f.fade = 255;
+        }
+    }
     if (!gPortDexPage) {   /* the GBA hides everything under its text band: so do we
                             * (else e.g. the lower rows of a back sprite flicker
                             * below the boxes when it moves - Mike's grey bar) */
@@ -1523,6 +1582,12 @@ void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
                 fl[y * fpitch + x] &= 0x00FFFFFFu;
         if (sIntroPix)
             IntroRows(fl, fpitch);
+        gMarked = 0;
+        MarkTrainers(fl, fpitch);
+#ifndef __vita__
+        if (getenv("PKR_MARK_LOG") && Port_FrameCounter() % 50 == 0)
+            fprintf(stderr, "[mark] f%u %d\n", Port_FrameCounter(), gMarked);
+#endif
 #ifndef __vita__
         if (sIntroPix && getenv("PKR_INTRO_DUMPI") && Port_FrameCounter() == (u32)atoi(getenv("PKR_INTRO_DUMPI"))) {
             FILE *o = fopen("/tmp/w13/in.ppm", "wb");
@@ -1680,8 +1745,8 @@ void PortStage_ComposeCpu(const PortBattleFrame *f, u32 *fb, int pitch)
             break;
         for (x = 0; x < W; x++) {
             u32 c = a == b ? row[a][x] : Avg(row[a][x], row[b][x]);
-            if ((c >> 24) == 0xFF)
-                p[x] = c;
+            if ((c >> 24) >= 0xFE)
+                p[x] = c | 0xFF000000u;
             else if (c >> 24)   /* blended over the stage (Surf) */
                 p[x] = Mix(p[x], c | 0xFF000000u, (int)(c >> 24));
         }
