@@ -33,6 +33,8 @@
 #include "task.h"
 #include "constants/map_types.h"
 #include "constants/weather.h"
+#include "constants/battle.h"
+extern u32 gBattleTypeFlags;
 
 #include "port/port.h"
 #include "port/port_config.h"
@@ -78,9 +80,15 @@ static u32 sFrame;
 
 /* ---- tileset access ------------------------------------------------- */
 
-static u8 sTiles[2][512 * 32];
-static u32 sPal[16][16];
-static u32 *sMeta[1024][2];   /* 16x16 ABGR, [0] whole block, [1] card */
+/* [0] the map's own tilesets, [1] a connected map's other ones (the stage
+ * at a map border: Mike, 0.3.12); metatile ids 1024.. are [1]'s */
+static u8 sTilesS[2][2][512 * 32];
+static u32 sPalS[2][16][16];
+static const struct MapLayout *sLayoutS[2];
+static int sCtx;
+#define sTiles sTilesS[sCtx]
+#define sPal sPalS[sCtx]
+static u32 *sMeta[2048][2];   /* 16x16 ABGR, [0] whole block, [1] card */
 static u16 sBase;             /* ground used under solid blocks */
 static u32 sBaseImg[256];
 
@@ -118,25 +126,37 @@ static void DrawTile(u32 *dst, u16 e, int opaque)
 
 static const u16 *MetatileEntries(u16 id)
 {
-    const struct MapLayout *l = gMapHeader.mapLayout;
+    const struct MapLayout *l = sLayoutS[id >= 1024];
+    id &= 1023;
     if (id < NUM_METATILES_IN_PRIMARY)
         return l->primaryTileset->metatiles + id * 8;
     return l->secondaryTileset->metatiles + (id - NUM_METATILES_IN_PRIMARY) * 8;
 }
 
 /* kind 0: the whole block, opaque; 1: a card (the ground taken out) */
+static int TopPixels(u16 id);
 static const u32 *Meta(u16 id, int kind)
 {
     static const int ofs[4] = {0, 8, 128, 136};
     u32 *img;
     int i, k;
-    if (id >= 1024)
+    if (id >= 2048 || (id >= 1024 && !sLayoutS[1]))
         id = 0;
     if (sMeta[id][kind])
         return sMeta[id][kind];
+    sCtx = id >= 1024;
     img = calloc(256, 4);
     if (!img)
         return sBaseImg;
+    /* an upright card of a thing drawn on its top layer (a rock in the
+     * water, a tree): that layer alone - no water or ground around it
+     * (Mike, 0.3.12) */
+    if (kind == 1 && TopPixels(id) >= 24) {
+        for (i = 0; i < 4; i++)
+            DrawTile(img + ofs[i], MetatileEntries(id)[4 + i], 0);
+        sMeta[id][kind] = img;
+        return img;
+    }
     for (k = 0; k < 2; k++)
         for (i = 0; i < 4; i++)
             DrawTile(img + ofs[i], MetatileEntries(id)[k * 4 + i], kind == 0 && k == 0);
@@ -148,19 +168,66 @@ static const u32 *Meta(u16 id, int kind)
     return img;
 }
 
-static u16 sTopPix[1024];   /* top layer pixels + 1, 0 = not counted */
+static u16 sTopPix[2048];   /* top layer pixels + 1, 0 = not counted */
 
 static void FreeMeta(void)
 {
     int i;
     memset(sTopPix, 0, sizeof(sTopPix));
-    for (i = 0; i < 1024; i++) {
+    for (i = 0; i < 2048; i++) {
         free(sMeta[i][0]); free(sMeta[i][1]);
         sMeta[i][0] = sMeta[i][1] = NULL;
     }
 }
 
-static int Solid(u16 block)
+u16 PortMapGetBlockWideL(int x, int y, const struct MapLayout **from);
+static void LoadLayout(int ctx, const struct MapLayout *l)
+{
+    int i, c, old = sCtx;
+    sCtx = ctx;
+    sLayoutS[ctx] = l;
+    LoadTileset(l->primaryTileset, 0);
+    LoadTileset(l->secondaryTileset, 1);
+    for (i = 0; i < 16; i++) {
+        const struct Tileset *t = i < NUM_PALS_IN_PRIMARY ? l->primaryTileset : l->secondaryTileset;
+        for (c = 0; c < 16; c++)
+            sPal[i][c] = t ? Abgr(t->palettes[i][c]) : 0;
+    }
+    sCtx = old;
+}
+#define LoadAlt(from) LoadLayout(1, from)
+/* a block, with bit 16 set when it is a connected map's with other
+ * tilesets (then its metatile is MID() 1024.. ) */
+static u32 BlockAt(int x, int y)
+{
+    const struct MapLayout *from = NULL;
+    u32 b = PortMapGetBlockWideL(x, y, &from);
+    const struct MapLayout *l = gMapHeader.mapLayout;
+    if (b == MAPGRID_UNDEFINED || !from || (from->primaryTileset == l->primaryTileset &&
+                                           from->secondaryTileset == l->secondaryTileset))
+        return b;
+    if (!sLayoutS[1])
+        LoadAlt(from);
+    if (sLayoutS[1]->primaryTileset != from->primaryTileset || sLayoutS[1]->secondaryTileset != from->secondaryTileset)
+        return b;   /* a third set: as ours (rare) */
+    return b | 0x10000u;
+}
+#define MID(b) ((u16)(((b) & 0x3FF) | (((b) >> 16) << 10)))
+
+static u16 AttrOf(u16 mid)
+{
+    const struct MapLayout *l = sLayoutS[mid >= 1024];
+    const struct Tileset *t;
+    mid &= 1023;
+    if (!l)
+        return 0;
+    t = mid < NUM_METATILES_IN_PRIMARY ? l->primaryTileset : l->secondaryTileset;
+    if (!t || !t->metatileAttributes)
+        return 0;
+    return t->metatileAttributes[mid < NUM_METATILES_IN_PRIMARY ? mid : mid - NUM_METATILES_IN_PRIMARY];
+}
+
+static int Solid(u32 block)
 {
     return (block & MAPGRID_COLLISION_MASK) != 0;
 }
@@ -170,10 +237,11 @@ static int TopPixels(u16 id)
 {
     u16 *cache = sTopPix;
     int i, x, y, n = 0;
-    if (id >= 1024)
+    if (id >= 2048 || (id >= 1024 && !sLayoutS[1]))
         return 0;
     if (cache[id])
         return cache[id] - 1;
+    sCtx = id >= 1024;
     for (i = 0; i < 4; i++) {
         u16 e = MetatileEntries(id)[4 + i];
         int tid = e & 0x3FF;
@@ -199,24 +267,24 @@ enum { K_GROUND, K_FLAT, K_CARD, K_WALL };
 static u8 sKind[KR * 2][KR * 2];
 static int sKx, sKy, sDark;
 
-static int Behavior(u16 b)
+static int Behavior(u32 b)
 {
-    return GetMetatileAttributesById(b & MAPGRID_METATILE_ID_MASK) & 0xFF;
+    return AttrOf(MID(b)) & 0xFF;
 }
 
-static int IsWaterB(u16 b)
+static int IsWaterB(u32 b)
 {
     return b != MAPGRID_UNDEFINED && MetatileBehavior_IsSurfableWaterOrUnderwater((u8)Behavior(b));
 }
 
-static int OpenB(u16 b)   /* walkable or water: not a solid thing */
+static int OpenB(u32 b)   /* walkable or water: not a solid thing */
 {
     return b != MAPGRID_UNDEFINED && (!Solid(b) || (Behavior(b) >= 0x38 && Behavior(b) <= 0x3F));
 }
 
 static int ClassifyBlock(int bx, int by)
 {
-    u16 b = PortMapGetBlockWide(bx, by);
+    u32 b = BlockAt(bx, by);
     int beh, top, open = 0, water = 0, k;
     static const s8 d4[4][2] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
     if (b == MAPGRID_UNDEFINED)
@@ -226,9 +294,9 @@ static int ClassifyBlock(int bx, int by)
     beh = Behavior(b);
     if (beh >= 0x38 && beh <= 0x3F)   /* ledges */
         return K_FLAT;
-    top = TopPixels(b & MAPGRID_METATILE_ID_MASK);
+    top = TopPixels(MID(b));
     for (k = 0; k < 4; k++) {
-        u16 n = PortMapGetBlockWide(bx + d4[k][0], by + d4[k][1]);
+        u32 n = BlockAt(bx + d4[k][0], by + d4[k][1]);
         open += OpenB(n);
         water += IsWaterB(n);
     }
@@ -239,11 +307,11 @@ static int ClassifyBlock(int bx, int by)
     if (water)   /* banks and shores */
         return K_FLAT;
     {   /* one block thin across the view (edges, cliff rims): flat */
-        u16 a, c;
+        u32 a, c;
         if (sFy != 0) {
-            a = PortMapGetBlockWide(bx, by - 1); c = PortMapGetBlockWide(bx, by + 1);
+            a = BlockAt(bx, by - 1); c = BlockAt(bx, by + 1);
         } else {
-            a = PortMapGetBlockWide(bx - 1, by); c = PortMapGetBlockWide(bx + 1, by);
+            a = BlockAt(bx - 1, by); c = BlockAt(bx + 1, by);
         }
         if (OpenB(a) && OpenB(c))
             return K_FLAT;
@@ -283,13 +351,13 @@ static u32 GroundAt(float wx, float wy)
 {
     int ix = (int)wx, iy = (int)wy;
     int bx = ix >> 4, by = iy >> 4;
-    u16 b = PortMapGetBlockWide(bx, by);
+    u32 b = BlockAt(bx, by);
     const u32 *img;
     int k = KindAt(bx, by);
     if (b == MAPGRID_UNDEFINED || k == K_CARD || k == K_WALL)
         img = Meta(sBase, 0);
     else
-        img = Meta(b & MAPGRID_METATILE_ID_MASK, 0);
+        img = Meta(MID(b), 0);
     return img[(iy & 15) * 16 + (ix & 15)];
 }
 
@@ -378,6 +446,84 @@ static u32 sStageW[H][W];      /* the stage with the weather tint */
  * (the nearest wall block along the column's ray, its picture stood up) */
 #define WALL_H 44.0f
 #define WALL_MIN 150.0f
+/* Caves: two rows of the cave intro's rocks (the battle start scenery)
+ * standing above the horizon, the back row smaller and darker, tinted with
+ * the colour of the cave's own walls; the floor stays the map (Mike's
+ * variant B, 0.3.12) */
+extern const u8 gBattleEnvironmentAnimTiles_Cave[], gBattleEnvironmentAnimTilemap_Cave[],
+    gBattleEnvironmentPalette_Cave[];
+static void CaveRocks(int px, int py)
+{
+    static u8 tiles[0x4000];
+    static u16 map[32 * 32], pal[3 * 16];
+    static u32 rk[256 * 64];
+    u32 r = 0, g = 0, b = 0, n = 0, lr = 0, lg = 0, lb = 0, ln = 0;
+    int x, y, row0 = -1, row1 = -1, rh, i, k;
+
+    if (((gBattleEnvironmentAnimTiles_Cave[1] | gBattleEnvironmentAnimTiles_Cave[2] << 8 |
+          gBattleEnvironmentAnimTiles_Cave[3] << 16)) > sizeof(tiles))
+        return;
+    LZ77UnCompWram(gBattleEnvironmentAnimTiles_Cave, tiles);
+    LZ77UnCompWram(gBattleEnvironmentAnimTilemap_Cave, map);
+    LZ77UnCompWram(gBattleEnvironmentPalette_Cave, pal);
+    for (y = 0; y < 32; y++)
+        for (x = 0; x < 32; x++)
+            if (map[y * 32 + x] & 0x3FF) {
+                if (row0 < 0) row0 = y;
+                row1 = y;
+            }
+    if (row0 < 0)
+        return;
+    rh = (row1 - row0 + 1) * 8;
+    if (rh > 64)
+        rh = 64;
+    for (y = 0; y < rh; y++)
+        for (x = 0; x < 256; x++) {
+            u16 e = map[(row0 + y / 8) * 32 + x / 8];
+            int tid = e & 0x3FF, p = (e >> 12) - 2, sx = (e & 0x400) ? 7 - (x & 7) : (x & 7),
+                sy = (e & 0x800) ? 7 - (y & 7) : (y & 7), ci;
+            u8 v = tid * 32 + sy * 4 + sx / 2 < (int)sizeof(tiles) ? tiles[tid * 32 + sy * 4 + sx / 2] : 0;
+            ci = (sx & 1) ? v >> 4 : v & 15;
+            rk[y * 256 + x] = (ci && p >= 0 && p < 3) ? Abgr(pal[p * 16 + ci]) : 0;
+        }
+    /* the walls' colour here, and the rocks' own average */
+    for (y = -10; y <= 10; y++)
+        for (x = -10; x <= 10; x++)
+            if (KindAt(px + x, py + y) == K_WALL) {
+                u32 bl = BlockAt(px + x, py + y);
+                const u32 *m = Meta(bl == MAPGRID_UNDEFINED ? sBase : MID(bl), 0);
+                for (i = 0; i < 256; i += 7) {
+                    r += m[i] & 255; g += (m[i] >> 8) & 255; b += (m[i] >> 16) & 255; n++;
+                }
+            }
+    for (i = 0; i < 256 * rh; i++)
+        if (rk[i]) {
+            lr += rk[i] & 255; lg += (rk[i] >> 8) & 255; lb += (rk[i] >> 16) & 255; ln++;
+        }
+    if (n && ln) {   /* each channel scaled from the rocks' average to the walls' */
+        u32 tr = r / n, tg = g / n, tb = b / n, ar = lr / ln + 1, ag = lg / ln + 1, ab = lb / ln + 1;
+        for (i = 0; i < 256 * rh; i++)
+            if (rk[i]) {
+                u32 cr = (rk[i] & 255) * tr / ar, cg = ((rk[i] >> 8) & 255) * tg / ag, cb = ((rk[i] >> 16) & 255) * tb / ab;
+                rk[i] = 0xFF000000u | (cb > 255 ? 255 : cb) << 16 | (cg > 255 ? 255 : cg) << 8 | (cr > 255 ? 255 : cr);
+            }
+    }
+    for (k = 1; k >= 0; k--) {   /* back row first */
+        float sc = k ? 1.0f : 1.5f;
+        int base = HOR + (k ? -10 : 8), shade = k ? 120 : 30, off = k ? 97 : 0, dh = (int)(rh * sc);
+        for (y = 0; y < dh; y++) {
+            int yy = base - dh + y, sy = (int)(y / sc);
+            if (yy < 0 || yy >= H)
+                continue;
+            for (x = 0; x < W; x++) {
+                u32 c = rk[sy * 256 + ((int)((x + off) / sc)) % 256];
+                if (c >> 24)
+                    sStage[yy][x] = Mix(c, 0xFF000000u, shade);
+            }
+        }
+    }
+}
+
 static void CaveWalls(void)
 {
     int x, y;
@@ -391,7 +537,7 @@ static void CaveWalls(void)
             wy = sCamY + sFy * d + sRy * lat1 * d;
             k = KindAt((int)floorf(wx / 16), (int)floorf(wy / 16));
             if (k == K_WALL && d >= WALL_MIN) {
-                hit = PortMapGetBlockWide((int)floorf(wx / 16), (int)floorf(wy / 16));
+                hit = BlockAt((int)floorf(wx / 16), (int)floorf(wy / 16));
                 hitD = d;
                 break;
             }
@@ -407,7 +553,7 @@ static void CaveWalls(void)
             /* along the wall: the coordinate that runs across the hit face */
             float fx = wx - floorf(wx / 16) * 16, fy = wy - floorf(wy / 16) * 16;
             int u = (fx < 1.5f || fx > 14.5f) ? (int)fy : (int)fx;
-            const u32 *img = Meta(hit == MAPGRID_UNDEFINED ? sBase : (hit & MAPGRID_METATILE_ID_MASK), 0);
+            const u32 *img = Meta(hit == MAPGRID_UNDEFINED ? sBase : MID(hit), 0);
             if (foot >= H) foot = H - 1;
             for (y = HOR + 1; y < top && y < H; y++)   /* nothing seen over the wall */
                 sStage[y][x] = SkyAt(HOR);
@@ -431,7 +577,7 @@ static void Build(void)
     static struct Card cards[1500];
     static u8 used[96][96];
     int n = 0, x, y, i, px = pl->currentCoords.x, py = pl->currentCoords.y;
-    int counts[1024] = {0}, best = 0;
+    int counts[2048] = {0}, best = 0;
 
     sSky = gMapHeader.mapType == MAP_TYPE_UNDERGROUND || gMapHeader.mapType == MAP_TYPE_INDOOR ||
            gMapHeader.mapType == MAP_TYPE_SECRET_BASE;
@@ -441,22 +587,16 @@ static void Build(void)
         sWeather = atoi(getenv("PKR_STAGE_WEATHER"));
 #endif
     FreeMeta();
-    LoadTileset(l->primaryTileset, 0);
-    LoadTileset(l->secondaryTileset, 1);
-    for (i = 0; i < 16; i++) {
-        const u16 *p = (i < NUM_PALS_IN_PRIMARY ? l->primaryTileset : l->secondaryTileset)->palettes[i];
-        int c;
-        for (c = 0; c < 16; c++)
-            sPal[i][c] = Abgr(p[c]);
-    }
+    sLayoutS[1] = NULL;
+    LoadLayout(0, l);
     /* the ground under solid things: the most common walkable block nearby */
     for (y = -10; y <= 10; y++)
         for (x = -10; x <= 10; x++) {
-            u16 b = PortMapGetBlockWide(px + x, py + y);
+            u32 b = BlockAt(px + x, py + y);
             if (b != MAPGRID_UNDEFINED && !Solid(b))
-                counts[b & MAPGRID_METATILE_ID_MASK]++;
+                counts[MID(b)]++;
         }
-    for (i = 0; i < 1024; i++)
+    for (i = 0; i < 2048; i++)
         if (counts[i] > counts[best])
             best = i;
     sBase = (u16)best;
@@ -496,37 +636,9 @@ static void Build(void)
         }
     }
 
-#ifndef __vita__
-    if (sDark && getenv("PKR_CAVE_ROCKS")) {   /* mock-up: the intro's rocks at the horizon */
-        static u32 rk[256 * 64];
-        int rw = 0, rh = 0, rows = getenv("PKR_CAVE_ROWS") ? atoi(getenv("PKR_CAVE_ROWS")) : 1, r;
-        FILE *f = fopen(getenv("PKR_CAVE_ROCKS"), "rb");
-        if (f && fscanf(f, "P6 %d %d 255", &rw, &rh) == 2 && rw <= 256 && rh <= 64) {
-            fgetc(f);
-            for (i = 0; i < rw * rh; i++) {
-                int R = fgetc(f), G = fgetc(f), B = fgetc(f);
-                rk[i] = (R == 255 && G == 0 && B == 255) ? 0 : 0xFF000000u | (B << 16) | (G << 8) | R;
-            }
-            for (r = rows - 1; r >= 0; r--) {   /* back row first */
-                float sc = r ? 1.0f : 1.5f;
-                int base = HOR + (r ? -10 : 8), shade = r ? 120 : 30, off = r ? 97 : 0;
-                int dh = (int)(rh * sc);
-                for (y = 0; y < dh; y++) {
-                    int yy = base - dh + y, sy = (int)(y / sc);
-                    if (yy < 0 || yy >= H) continue;
-                    for (x = 0; x < W; x++) {
-                        int sx = ((int)((x + off) / sc)) % rw;
-                        u32 c = rk[sy * rw + sx];
-                        if (c >> 24)
-                            sStage[yy][x] = Mix(c, 0xFF000000u, shade);
-                    }
-                }
-            }
-        }
-        if (f) fclose(f);
-    } else
-#endif
-    if (sDark)
+    if (gMapHeader.mapType == MAP_TYPE_UNDERGROUND)
+        CaveRocks(px, py);
+    else if (sDark)
         CaveWalls();
 
     /* a far tree line on the horizon (outside) */
@@ -535,11 +647,11 @@ static void Build(void)
         int found = 0;
         for (y = -12; y <= 12 && !found; y++)
             for (x = -12; x <= 12 && !found; x++) {
-                u16 a = PortMapGetBlockWide(px + x, py + y), b = PortMapGetBlockWide(px + x + 1, py + y);
-                u16 c = PortMapGetBlockWide(px + x, py + y + 1), e = PortMapGetBlockWide(px + x + 1, py + y + 1);
+                u32 a = BlockAt(px + x, py + y), b = BlockAt(px + x + 1, py + y);
+                u32 c = BlockAt(px + x, py + y + 1), e = BlockAt(px + x + 1, py + y + 1);
                 if (Solid(a) && Solid(b) && Solid(c) && Solid(e) && a != MAPGRID_UNDEFINED &&
-                    (a & 0x3FF) != (b & 0x3FF)) {
-                    tree[0] = a & 0x3FF; tree[1] = b & 0x3FF; tree[2] = c & 0x3FF; tree[3] = e & 0x3FF;
+                    MID(a) != MID(b)) {
+                    tree[0] = MID(a); tree[1] = MID(b); tree[2] = MID(c); tree[3] = MID(e);
                     found = 1;
                 }
             }
@@ -565,8 +677,8 @@ static void Build(void)
         for (y = -12; y <= 12; y++) {
             char line[64];
             for (x = -14; x <= 14; x++) {
-                u16 b = PortMapGetBlockWide(px + x, py + y);
-                u16 a = GetMetatileAttributesById(b & 0x3FF);
+                u32 b = BlockAt(px + x, py + y);
+                u16 a = AttrOf(MID(b));
                 int beh = a & 0xFF, lay = (a >> 12) & 3;
                 char c = "._CW"[KindAt(px + x, py + y)];
                 (void)a; (void)beh; (void)lay; (void)b;
@@ -582,7 +694,7 @@ static void Build(void)
     for (y = -40; y < 40; y++)
         for (x = -40; x < 40; x++) {
             int bx = px + x, by = py + y, w = 1, h = 1, k;
-            u16 b = PortMapGetBlockWide(bx, by);
+            u32 b = BlockAt(bx, by);
             float cx, cy, rx, ry, d, lat;
             if (used[y + 48][x + 48] || b == MAPGRID_UNDEFINED || KindAt(bx, by) != K_CARD)
                 continue;
@@ -612,7 +724,7 @@ static void Build(void)
             cards[n].sy = HOR + CAM_H * cards[n].s;
             cards[n].w = (u8)w; cards[n].h = (u8)h;
             for (k = 0; k < 4; k++)
-                cards[n].id[k] = PortMapGetBlockWide(bx + (k & 1) * (w - 1), by + (k >> 1) * (h - 1)) & 0x3FF;
+                cards[n].id[k] = MID(BlockAt(bx + (k & 1) * (w - 1), by + (k >> 1) * (h - 1)));
             if (w == 1 && h == 2) { cards[n].id[1] = cards[n].id[2]; }
             n++;
         }
@@ -631,9 +743,7 @@ static void Build(void)
         DrawCard(img, w * 16, h * 16, cards[i].sx, cards[i].sy, cards[i].s, hz);
     }
     Soften();
-    /* shadows where the Pokemon stand (GBA: foe around (176,72), player (72,112)) */
-    Shadow(SX(176), SY(74), 50, 12);
-    Shadow(SX(72), SY(110), 70, 14);
+    (void)Shadow;   /* the shadows follow the figures now: Shadows() */
     BakeWeather();
     sState = 1;
     gPortAnimBg = gPortBgMon[0] = gPortBgMon[1] = 0;
@@ -729,21 +839,15 @@ static void PlanUi(void)
     /* the foes' boxes as a block 8 px from the left edge, ours 8 px from
      * the right one (double battles: the second foe's box lies further
      * left on the GBA - its edge was cut off; Mike, 0.3.12) */
-    int minL = 13, maxR = 230, minT = 16;
-    for (i = 0; i < 128; i++) {
-        int ox, oy, ow, oh;
-        if (!IsHud(i))
-            continue;
-        ObjBox(i, &ox, &oy, &ow, &oh);
-        if (ow <= 0)
-            continue;
-        if (gPortOamX[i] < PORT_GBA_W / 2) {
-            if (ox < minL) minL = ox;
-            if (oy < minT && oy > -32) minT = oy;
-        } else if (ox + ow > maxR && ox + ow <= PORT_GBA_W + 16) {
-            maxR = ox + ow;
-        }
-    }
+    /* fixed references - the boxes' resting places on the GBA (battle_interface.c
+     * sub_8043F44) - so a box sliding in moves on the screen too (with live
+     * edges it stood still and jumped: Mike, 0.3.12 stutter) */
+    int dbl = (gBattleTypeFlags & BATTLE_TYPE_DOUBLE) != 0;
+    int minL = dbl ? 0 : 12, minT = dbl ? 3 : 14, maxR = dbl ? 255 : 254;
+#ifndef __vita__
+    if (getenv("PKR_HUD_LOG") && Port_FrameCounter() % 10 == 0)
+        fprintf(stderr, "[hud] f%u L%d T%d R%d\n", Port_FrameCounter(), minL, minT, maxR);
+#endif
     for (i = 0; i < 128; i++) {
         sUiObj[i] = 0;
         if (IsHud(i)) {
@@ -772,7 +876,12 @@ static int Wide(int b)
 {
     if (gPortDexPage)   /* the caught Pokemon's dex page: GBA sized (Mike, 0.3.11) */
         return 0;
-    return gPortBattleIntro || gPortAnimBg || !gPortBgMon[b - 1];
+    if (b == 3)
+        return 1;
+    /* a battler's picture on it: GBA wide even with a move background on
+     * BG3 - else the copy repeats at the far edge (Psychic with the outer
+     * places: a second Pikachu at the left; 0.3.13) */
+    return gPortBattleIntro || !gPortBgMon[b - 1];
 }
 
 /* A move's picture is 240x160 in a 256x256 map: outside it, the GBA
@@ -801,7 +910,9 @@ static void FieldKnobs(int noObj)
 {
     int b, i;
     ClearKnobs();
-    for (b = 1; b <= 2; b++) {
+    /* BG3 too while a move's background replaces the battle one there
+     * (fadetobg: Crunch's dark, Extreme Speed's lines ...) */
+    for (b = 1; b <= (gPortAnimBg ? 3 : 2); b++) {
         virtuappu_mode1_bg_dx[b] = -FX0 & 511;
         virtuappu_mode1_bg_clip_y1[b] = FH;
         /* the GBA picture; the intro scenery (a repeating band) as wide
@@ -921,18 +1032,18 @@ static int sFill;
 int PortStage_BgFillPass(int *h)
 {
     int b, i;
-    int full[3] = {0, 0, 0}, any = 0;
+    int full[4] = {0, 0, 0, 0}, any = 0;
     extern u8 gHostIo[], gHostVram[];
     sFill = 0;
     if (gPortDexPage || gPortBattleIntro)
         return 0;
     /* a picture over the whole GBA screen on BG1 / BG2 (backgrounds of
      * moves, Attract's hearts, ...): its tile map is (nearly) all set */
-    for (b = 1; b <= 2; b++) {
+    for (b = 1; b <= 3; b++) {
         u16 cnt = gHostIo[8 + b * 2] | (gHostIo[9 + b * 2] << 8);
         const u16 *map = (const u16 *)(gHostVram + ((cnt >> 8) & 31) * 0x800);
         int n = 0, tx, ty;
-        if (!(gHostIo[1] & (1 << b)) || gPortBgMon[b - 1])
+        if (!(gHostIo[1] & (1 << b)) || (b < 3 && gPortBgMon[b - 1]) || (b == 3 && !gPortAnimBg))
             continue;
         for (ty = 0; ty < 20; ty++)
             for (tx = 0; tx < 30; tx++)
@@ -943,7 +1054,7 @@ int PortStage_BgFillPass(int *h)
     if (!any)
         return 0;
     ClearKnobs();
-    for (b = 1; b <= 2; b++)
+    for (b = 1; b <= 3; b++)
         if (full[b])
             WrapRegions(b, BGFILL_DY, BGFILL_H);
     virtuappu_mode1_win_dx = FX0;
@@ -961,8 +1072,9 @@ void PortStage_SetBgFillPixels(const u32 *pix, int pitch)
         return;
     int top = 0, bot = 0;
     for (x = 0; x < FW; x += 4) {   /* a picture up to the GBA screen's edge */
-        top += (pix[BGFILL_DY * pitch + x] >> 24) != 0;
-        bot += (pix[(BGFILL_DY + PORT_GBA_H - 1 < BGFILL_H ? BGFILL_DY + PORT_GBA_H - 1 : BGFILL_H - 1) * pitch + x] >> 24) != 0;
+        /* opaque only: a blended picture (Surf) is not mirrored (Mike, 0.3.12) */
+        top += (pix[BGFILL_DY * pitch + x] >> 24) == 0xFF;
+        bot += (pix[(BGFILL_DY + PORT_GBA_H - 1 < BGFILL_H ? BGFILL_DY + PORT_GBA_H - 1 : BGFILL_H - 1) * pitch + x] >> 24) == 0xFF;
     }
     top = top * 4 >= FW * 9 / 10;
     bot = bot * 4 >= FW * 9 / 10;
@@ -984,7 +1096,8 @@ void PortStage_SetBgFillPixels(const u32 *pix, int pitch)
         r = pix + (gy + BGFILL_DY) * pitch;
         for (x = 0; x < W; x++) {
             u32 c = r[(x * 2 + 1) / 3];
-            sFillStage[y][x] = (c >> 24) ? c : sStageW[y][x];
+            sFillStage[y][x] = (c >> 24) == 0xFF ? c : (c >> 24) ? Mix(sStageW[y][x], c | 0xFF000000u, (int)(c >> 24))
+                                                                : sStageW[y][x];
         }
     }
     sFill = 1;
@@ -1116,8 +1229,30 @@ static void ObjBox(int i, int *x, int *y, int *w, int *h)
 static int FadeAmount(int *white)
 {
     u16 c = gPaletteFade.blendColor;
-    if (!(gPaletteFade.multipurpose1 & 1))   /* backdrop palette not faded */
-        return 0;
+#ifndef __vita__
+    if (getenv("PKR_FADE_LOG"))
+        fprintf(stderr, "[fade] f%u act%d sel%08X y%d bc%04X  bd %04X/%04X p1 %04X/%04X\n", Port_FrameCounter(), gPaletteFade.active,
+                (unsigned)gPaletteFade.multipurpose1, gPaletteFade.y, c, gPlttBufferFaded[0], gPlttBufferUnfaded[0], gPlttBufferFaded[1], gPlttBufferUnfaded[1]);
+#endif
+    if (!(gPaletteFade.multipurpose1 & 1)) {  /* backdrop palette not faded */
+        /* ... or the fade has ended with the screen dark: the selection is
+         * cleared then, the palettes stay black (the battle menus' fade:
+         * the stage came back around black silhouettes; Mike, 0.3.12) */
+        int i, n = 0;
+        if (gPaletteFade.y < 16)
+            return 0;
+        for (i = 1; i < 512; i++) {
+            if (gPlttBufferUnfaded[i] == c || (i & 15) == 0)
+                continue;
+            if (gPlttBufferFaded[i] != c)
+                return 0;
+            n++;
+        }
+        if (n < 8)
+            return 0;
+        *white = (c & 31) + ((c >> 5) & 31) + ((c >> 10) & 31) > 45;
+        return 256;
+    }
     *white = (c & 31) + ((c >> 5) & 31) + ((c >> 10) & 31) > 45;
     return gPaletteFade.y * 16;
 }
@@ -1266,6 +1401,40 @@ static void Unframe(u32 *ui, int pitch, const virtuappu_mode1_region *g)
 }
 
 /* After both passes: the frame for the platform. */
+/* shadows under the battlers' sprites (Pokemon, or the trainer while it is
+ * on the field): where the figure is across, on its side's ground line */
+static PortShadow sShadow[4];
+extern u8 gBattlerSpriteIds[], gBattlersCount;
+u8 GetBattlerSpriteCoord(u8, u8);
+u8 GetBattlerSide(u8);
+static int Shadows(void)
+{
+    int b, n = 0;
+    if (gPortDexPage || gMain.callback2 != BattleMainCB2)
+        return 0;
+    for (b = 0; b < gBattlersCount && b < 4; b++) {
+        u8 id = gBattlerSpriteIds[b];
+        const struct Sprite *sp;
+        int foe = GetBattlerSide(b) == 1, gy;
+        if (id >= MAX_SPRITES)
+            continue;
+        sp = &gSprites[id];
+        if (!sp->inUse || sp->invisible)
+            continue;
+        gy = GetBattlerSpriteCoord(b, 1) + (foe ? 34 : 30);
+        sShadow[n].cx = (int16_t)SX(sp->x + sp->x2);
+        sShadow[n].cy = (int16_t)SY(gy);
+        sShadow[n].rx = foe ? 50 : 70;
+        sShadow[n].ry = foe ? 12 : 14;
+        n++;
+    }
+#ifndef __vita__
+    if (getenv("PKR_SHADOW_LOG"))
+        for (b = 0; b < n; b++) fprintf(stderr, "[shadow] f%u %d,%d\n", Port_FrameCounter(), sShadow[b].cx, sShadow[b].cy);
+#endif
+    return n;
+}
+
 void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
 {
     static unsigned serial;
@@ -1341,6 +1510,8 @@ void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
     f.stageSerial = serial;
     f.parts = sPart;
     f.nparts = sNPart;
+    f.shadows = sShadow;
+    f.nshadows = Shadows();
     f.fadeColor = white ? 0xFFFFFFFFu : 0xFF000000u;
     f.fade = fade > 255 ? 255 : fade;
     if (!gPortDexPage) {   /* the GBA hides everything under its text band: so do we
@@ -1377,6 +1548,13 @@ void PortStage_Present(const u32 *field, int fpitch, const u32 *ui, int upitch)
         }
 #endif
     }
+#ifndef __vita__
+    if (getenv("PKR_FIELD_DUMP") && Port_FrameCounter() == (u32)atoi(getenv("PKR_FIELD_DUMP"))) {
+        int xs[6] = {5, 30, 60, 160, 290, 315};
+        for (i = 0; i < 6; i++)
+            fprintf(stderr, "[field] x%d y40 %08X y100 %08X\n", xs[i], field[40 * fpitch + xs[i]], field[100 * fpitch + xs[i]]);
+    }
+#endif
     f.field = field;
     f.fieldPitch = fpitch;
     f.fieldW = FW;
@@ -1401,7 +1579,7 @@ static inline u32 Avg(u32 a, u32 b)
         return b;
     if (!(b >> 24))
         return a;
-    return 0xFF000000u | (((a & 0xFEFEFEu) >> 1) + ((b & 0xFEFEFEu) >> 1));
+    return ((((a >> 24) + (b >> 24)) >> 1) << 24) | (((a & 0xFEFEFEu) >> 1) + ((b & 0xFEFEFEu) >> 1));
 }
 
 /* source pixels of an output pixel at 1.5x: a, between a and b, b */
@@ -1434,6 +1612,19 @@ static void CpuBlit(u32 *fb, int pitch, const u32 *src, int spitch, const PortBl
     }
 }
 
+static void CpuShadow(u32 *fb, int pitch, const PortShadow *s)
+{
+    int x, y;
+    for (y = -s->ry; y <= s->ry; y++)
+        for (x = -s->rx; x <= s->rx; x++) {
+            float d = (float)(x * x) / (s->rx * s->rx) + (float)(y * y) / (s->ry * s->ry);
+            int yy = s->cy + y, xx = s->cx + x;
+            if (d >= 1.0f || yy < 0 || yy >= H || xx < 0 || xx >= W)
+                continue;
+            fb[yy * pitch + xx] = Mix(fb[yy * pitch + xx], 0xFF102010u, (int)(110 * (1.0f - d)));
+        }
+}
+
 static void CpuLine(u32 *fb, int pitch, const PortParticle *p)
 {
     int n = abs(p->x1 - p->x0) > abs(p->y1 - p->y0) ? abs(p->x1 - p->x0) : abs(p->y1 - p->y0), k;
@@ -1463,6 +1654,8 @@ void PortStage_ComposeCpu(const PortBattleFrame *f, u32 *fb, int pitch)
     }
     for (y = 0; y < H; y++)
         memcpy(fb + y * pitch, f->stage + y * W, W * 4);
+    for (i = 0; i < f->nshadows; i++)
+        CpuShadow(fb, pitch, &f->shadows[i]);
     for (i = 0; i < f->nparts; i++)
         CpuLine(fb, pitch, &f->parts[i]);
     if (f->fade > 0)
@@ -1487,8 +1680,10 @@ void PortStage_ComposeCpu(const PortBattleFrame *f, u32 *fb, int pitch)
             break;
         for (x = 0; x < W; x++) {
             u32 c = a == b ? row[a][x] : Avg(row[a][x], row[b][x]);
-            if (c >> 24)
+            if ((c >> 24) == 0xFF)
                 p[x] = c;
+            else if (c >> 24)   /* blended over the stage (Surf) */
+                p[x] = Mix(p[x], c | 0xFF000000u, (int)(c >> 24));
         }
     }
     for (i = 0; i < f->nblits; i++)

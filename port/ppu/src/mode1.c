@@ -409,6 +409,16 @@ static bool mode1_is_second_target(uint16_t bldcnt, int layer_id) {
 }
 
 static uint32_t mode1_alpha_blend(uint32_t top_abgr, uint32_t bottom_abgr, int eva, int evb) {
+    /* the port's keyed backdrop (alpha 0: the stage shows there): on top it
+     * stays as it is; below, the top colour comes out partly transparent
+     * so the stage blends in instead of the backdrop colour (Surf) */
+    if (!(top_abgr >> 24u))
+        return top_abgr;
+    if (!(bottom_abgr >> 24u)) {
+        if (evb == 0 || eva >= 16)
+            return top_abgr;
+        return (top_abgr & 0x00FFFFFFu) | ((uint32_t)(eva >= 16 ? 255 : eva * 16) << 24u);
+    }
     /* VIRTUAPPU_BLEND_5BIT: GBA alpha blend is defined on 5-bit channels
      * (GBATEK: I = MIN(31, I1*eva + I2*evb), eva/evb already clamped 0..16 by
      * the caller). The framebuffer is 8-bit (palette value <<3), so recover the
@@ -439,6 +449,8 @@ static uint32_t mode1_alpha_blend(uint32_t top_abgr, uint32_t bottom_abgr, int e
 }
 
 static uint32_t mode1_brighten(uint32_t abgr, int evy) {
+    if (!(abgr >> 24u))   /* the port's keyed backdrop (the stage shows there): no effect */
+        return abgr;
     /* GBA brightness-increase on 5-bit channels (GBATEK):
      * I = I + (31-I)*evy/16, truncating; evy already clamped 0..16. */
     int r = (int)((abgr >> 0u) & 0xFFu) >> 3;
@@ -463,6 +475,8 @@ static uint32_t mode1_brighten(uint32_t abgr, int evy) {
 }
 
 static uint32_t mode1_darken(uint32_t abgr, int evy) {
+    if (!(abgr >> 24u))   /* the port's keyed backdrop (the stage shows there): no effect */
+        return abgr;
     /* GBA brightness-decrease on 5-bit channels (GBATEK):
      * I = I - I*evy/16, truncating; evy already clamped 0..16. */
     int r = (int)((abgr >> 0u) & 0xFFu) >> 3;
@@ -577,6 +591,15 @@ static const uint8_t* mode1_prepare_blend_lut(int eva, int evb) {
 }
 
 static inline uint32_t mode1_alpha_blend_lut(const uint8_t* lut, uint32_t top_abgr, uint32_t bottom_abgr) {
+    if (!(top_abgr >> 24u))   /* keyed backdrop: see mode1_alpha_blend */
+        return top_abgr;
+    if (!(bottom_abgr >> 24u)) {
+        /* eva from the table: top 31 over bottom 0 gives 31*eva/16 */
+        int eva = (lut[(31u << 5u) | 0u] * 16 + 30) / 31;
+        if (eva >= 16)
+            return top_abgr;
+        return (top_abgr & 0x00FFFFFFu) | ((uint32_t)(eva * 16) << 24u);
+    }
     const uint32_t r = lut[((top_abgr & 0xF8u) << 2u) | ((bottom_abgr & 0xF8u) >> 3u)];
     const uint32_t g = lut[((top_abgr >> 6u) & 0x3E0u) | ((bottom_abgr >> 11u) & 0x1Fu)];
     const uint32_t b = lut[((top_abgr >> 14u) & 0x3E0u) | ((bottom_abgr >> 19u) & 0x1Fu)];

@@ -79,6 +79,7 @@ static vita2d_texture *sStageTex, *sFieldTex, *sUiTex, *sHudTex;
 static PortBattleFrame sBattle;
 static int sBattleOn;
 static unsigned sStageSerial = ~0u;
+static vita2d_texture *sShadowTex;  /* soft ellipse under the battle figures */
 static vita2d_texture *sBackTex;   /* behind GBA sized screens */
 static int sBackOn;
 
@@ -117,6 +118,19 @@ static void VideoInit(void)
     vita2d_texture_set_filters(sFieldTex, SCE_GXM_TEXTURE_FILTER_POINT, SCE_GXM_TEXTURE_FILTER_POINT);
     vita2d_texture_set_filters(sUiTex, SCE_GXM_TEXTURE_FILTER_POINT, SCE_GXM_TEXTURE_FILTER_POINT);
     vita2d_texture_set_filters(sHudTex, SCE_GXM_TEXTURE_FILTER_POINT, SCE_GXM_TEXTURE_FILTER_POINT);
+    sShadowTex = vita2d_create_empty_texture_format(64, 16, SCE_GXM_TEXTURE_FORMAT_U8U8U8U8_ABGR);
+    if (sShadowTex) {   /* as PortStage_ComposeCpu: 0x102010 at up to 110/256 */
+        uint8_t *d = (uint8_t *)vita2d_texture_get_datap(sShadowTex);
+        unsigned st = vita2d_texture_get_stride(sShadowTex);
+        int x, y;
+        for (y = 0; y < 16; y++)
+            for (x = 0; x < 64; x++) {
+                float fx = (x + 0.5f - 32) / 32, fy = (y + 0.5f - 8) / 8, q = fx * fx + fy * fy;
+                uint32_t a = q >= 1.0f ? 0 : (uint32_t)(110 * (1.0f - q));
+                *(uint32_t *)(d + y * st + x * 4) = (a << 24) | 0x102010u;
+            }
+        vita2d_texture_set_filters(sShadowTex, SCE_GXM_TEXTURE_FILTER_LINEAR, SCE_GXM_TEXTURE_FILTER_LINEAR);
+    }
     sFont = vita2d_load_default_pgf();
 }
 
@@ -230,6 +244,11 @@ static void DrawBattle(float dx, float dy, float k)
     vita2d_start_drawing();
     vita2d_clear_screen();
     vita2d_draw_texture_scale(sStageTex, dx, dy, k, k);
+    for (i = 0; i < f->nshadows && sShadowTex; i++) {
+        const PortShadow *s = &f->shadows[i];
+        vita2d_draw_texture_scale(sShadowTex, dx + (s->cx - s->rx) * k, dy + (s->cy - s->ry) * k,
+                                  s->rx * 2 * k / 64.0f, s->ry * 2 * k / 16.0f);
+    }
     for (i = 0; i < f->nparts; i++) {
         const PortParticle *p = &f->parts[i];
         if (p->x0 == p->x1 || p->y0 == p->y1)
@@ -240,8 +259,11 @@ static void DrawBattle(float dx, float dy, float k)
     }
     if (f->fade > 0)
         vita2d_draw_rectangle(dx, dy, 480 * k, 272 * k, (f->fadeColor & 0x00FFFFFFu) | ((uint32_t)f->fade << 24));
-    vita2d_draw_texture_part_scale(sFieldTex, dx, dy + f->fieldY * k, 0, 0, (float)f->fieldW, (float)f->fieldH,
-                                   1.5f * k, 1.5f * k);
+    if (k == 2.0f && VitaHq_Scale3xAvailable())   /* field at 3x: Scale3x edges */
+        VitaHq_DrawScale3x(sFieldTex, dx, dy + f->fieldY * k, (float)f->fieldW, (float)f->fieldH);
+    else
+        vita2d_draw_texture_part_scale(sFieldTex, dx, dy + f->fieldY * k, 0, 0, (float)f->fieldW, (float)f->fieldH,
+                                       1.5f * k, 1.5f * k);
     for (i = 0; i < f->nblits; i++) {
         const PortBlit *b = &f->blits[i];
         vita2d_draw_texture_part_scale(sUiTex, dx + b->dx * k, dy + b->dy * k, b->sx, b->sy, b->w, b->h, k, k);

@@ -60,9 +60,11 @@ void Platform_Present(const uint32_t *pixels, int width, int height, int pitch, 
  * picture at their places. PortStage_ComposeCpu does the same in software. */
 typedef struct PortBlit { int16_t sx, sy, w, h, dx, dy; } PortBlit;
 typedef struct PortParticle { int16_t x0, y0, x1, y1; uint32_t color; } PortParticle; /* line, ABGR */
+typedef struct PortShadow { int16_t cx, cy, rx, ry; } PortShadow; /* ellipse on the stage */
 typedef struct PortBattleFrame {
     const uint32_t *stage;  unsigned stageSerial;          /* 480x272 */
     const PortParticle *parts; int nparts;
+    const PortShadow *shadows; int nshadows;                /* under the figures */
     uint32_t fadeColor; int fade;                           /* 0..255 over the stage */
     const uint32_t *field; int fieldPitch, fieldW, fieldH, fieldY;  /* alpha 0 = stage */
     const uint32_t *ui; int uiPitch;                        /* 240x160, alpha 0 = nothing */

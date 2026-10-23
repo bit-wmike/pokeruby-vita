@@ -25,6 +25,9 @@
 ) % 28)
 
 #define IS_DOUBLE_BATTLE() ((gBattleTypeFlags & BATTLE_TYPE_DOUBLE) ? TRUE : FALSE)
+/* port: single battles use the outer places of a double battle (the wide
+ * field has the room); contests keep theirs */
+#define COORD_ROW() (IsContest() ? IS_DOUBLE_BATTLE() : 1)
 
 #define NUM_BATTLE_SLOTS 4
 
@@ -163,10 +166,10 @@ u8 GetBattlerSpriteCoord(u8 slot, u8 a2)
     {
     case 0:
     case 2:
-        var = gUnknown_0837F578[IS_DOUBLE_BATTLE()][GetBattlerPosition(slot)].field_0;
+        var = gUnknown_0837F578[COORD_ROW()][GetBattlerPosition(slot)].field_0;
         break;
     case 1:
-        var = gUnknown_0837F578[IS_DOUBLE_BATTLE()][GetBattlerPosition(slot)].field_1;
+        var = gUnknown_0837F578[COORD_ROW()][GetBattlerPosition(slot)].field_1;
         break;
     case 3:
     case 4:
@@ -319,7 +322,7 @@ u8 GetBattlerSpriteFinal_Y(u8 slot, u16 species, u8 a3)
         offset = sub_8077BFC(slot, species);
         offset -= sub_8077DD8(slot, species);
     }
-    y = offset + gUnknown_0837F578[IS_DOUBLE_BATTLE()][GetBattlerPosition(slot)].field_1;
+    y = offset + gUnknown_0837F578[COORD_ROW()][GetBattlerPosition(slot)].field_1;
     if (a3)
     {
         if (GetBattlerSide(slot) == 0)

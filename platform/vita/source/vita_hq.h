@@ -6,4 +6,7 @@
 int VitaHq_Available(void);
 /* draws part (sx, sy, w, h) of t at (x, y), scaled, smoothed */
 void VitaHq_Draw(vita2d_texture *t, float x, float y, float sx, float sy, float w, float h, float scale);
+int VitaHq_Scale3xAvailable(void);
+/* battle field: Scale3x, alpha blended (scale fixed at 3) */
+void VitaHq_DrawScale3x(vita2d_texture *t, float x, float y, float w, float h);
 #endif

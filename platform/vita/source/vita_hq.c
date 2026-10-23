@@ -57,6 +57,50 @@ static const char sFragmentSrc[] =
     "    return float4(lerp(C, (A + B) * 0.5f, w), 1.0f);\n"
     "}\n";
 
+/* Scale3x (AdvMAME3x) for the battle field: exact pixel-art rule, each GBA
+ * pixel becomes 3x3 screen pixels; a corner takes a neighbour's colour where
+ * two neighbours meet across it. No new colours. Alpha kept (0 = stage). */
+static const char sScale3xSrc[] =
+    "bool eq(float4 a, float4 b) { return all(abs(a - b) < 0.004f); }\n"
+    "float4 main(float2 vTexcoord : TEXCOORD0, uniform sampler2D tex : TEXUNIT0,\n"
+    "            uniform float2 texSize) : COLOR\n"
+    "{\n"
+    "    float2 ps = 1.0f / texSize;\n"
+    "    float2 p = vTexcoord * texSize;\n"
+    "    float2 t = floor(p);\n"
+    "    float2 s = floor((p - t) * 3.0f);\n"
+    "    float2 c = (t + 0.5f) * ps;\n"
+    "    float4 E = tex2D(tex, c);\n"
+    "    float4 A = tex2D(tex, c + float2(-1.0f, -1.0f) * ps);\n"
+    "    float4 B = tex2D(tex, c + float2( 0.0f, -1.0f) * ps);\n"
+    "    float4 C = tex2D(tex, c + float2( 1.0f, -1.0f) * ps);\n"
+    "    float4 D = tex2D(tex, c + float2(-1.0f,  0.0f) * ps);\n"
+    "    float4 F = tex2D(tex, c + float2( 1.0f,  0.0f) * ps);\n"
+    "    float4 G = tex2D(tex, c + float2(-1.0f,  1.0f) * ps);\n"
+    "    float4 H = tex2D(tex, c + float2( 0.0f,  1.0f) * ps);\n"
+    "    float4 I = tex2D(tex, c + float2( 1.0f,  1.0f) * ps);\n"
+    "    float4 o = E;\n"
+    "    if (!eq(B, H) && !eq(D, F)) {\n"
+    "        if (s.y < 0.5f) {\n"
+    "            if (s.x < 0.5f) o = eq(D, B) ? D : E;\n"
+    "            else if (s.x < 1.5f) o = ((eq(D, B) && !eq(E, C)) || (eq(B, F) && !eq(E, A))) ? B : E;\n"
+    "            else o = eq(B, F) ? F : E;\n"
+    "        } else if (s.y < 1.5f) {\n"
+    "            if (s.x < 0.5f) o = ((eq(D, B) && !eq(E, G)) || (eq(D, H) && !eq(E, A))) ? D : E;\n"
+    "            else if (s.x > 1.5f) o = ((eq(B, F) && !eq(E, I)) || (eq(H, F) && !eq(E, C))) ? F : E;\n"
+    "        } else {\n"
+    "            if (s.x < 0.5f) o = eq(D, H) ? D : E;\n"
+    "            else if (s.x < 1.5f) o = ((eq(D, H) && !eq(E, I)) || (eq(H, F) && !eq(E, G))) ? H : E;\n"
+    "            else o = eq(H, F) ? F : E;\n"
+    "        }\n"
+    "    }\n"
+    "    return o;\n"
+    "}\n";
+
+static SceGxmShaderPatcherId sF3id;
+static SceGxmFragmentProgram *sFp3;
+static const SceGxmProgramParameter *sTexSize3;
+
 static int sState;   /* 0 not tried, 1 ready, -1 not available */
 static SceGxmShaderPatcherId sVid, sFid;
 static SceGxmVertexProgram *sVp;
@@ -109,7 +153,7 @@ static void *Compile(const char *text, int fragment)
 
 int VitaHq_Available(void)
 {
-    void *vbin, *fbin;
+    void *vbin, *fbin, *f3bin;
     SceGxmShaderPatcher *patcher;
     const SceGxmProgram *vp, *fp;
     const SceGxmProgramParameter *pos, *tc;
@@ -128,6 +172,11 @@ int VitaHq_Available(void)
     sceShaccCgSetDefaultAllocator(malloc, free);
     vbin = Compile(sVertexSrc, 0);
     fbin = Compile(sFragmentSrc, 1);
+    f3bin = Compile(sScale3xSrc, 1);
+    if (f3bin && sceGxmProgramCheck(f3bin) < 0)
+        f3bin = NULL;
+    if (!f3bin)
+        Platform_Log("[hq] Scale3x shader not compiled: battle field stays pixel exact\n");
     if (!vbin || !fbin || sceGxmProgramCheck(vbin) < 0 || sceGxmProgramCheck(fbin) < 0) {
         Platform_Log("[hq] shaders not compiled: HQ not available\n");
         return 0;
@@ -167,12 +216,28 @@ int VitaHq_Available(void)
         Platform_Log("[hq] programs not created\n");
         return 0;
     }
+    if (f3bin && sceGxmShaderPatcherRegisterProgram(patcher, (const SceGxmProgram *)f3bin, &sF3id) >= 0) {
+        static const SceGxmBlendInfo blend = {
+            SCE_GXM_COLOR_MASK_ALL, SCE_GXM_BLEND_FUNC_ADD, SCE_GXM_BLEND_FUNC_ADD,
+            SCE_GXM_BLEND_FACTOR_SRC_ALPHA, SCE_GXM_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            SCE_GXM_BLEND_FACTOR_ONE, SCE_GXM_BLEND_FACTOR_ZERO,
+        };
+        if (sceGxmShaderPatcherCreateFragmentProgram(patcher, sF3id, SCE_GXM_OUTPUT_REGISTER_FORMAT_UCHAR4,
+                                                     SCE_GXM_MULTISAMPLE_NONE, &blend, vp, &sFp3) < 0)
+            sFp3 = NULL;
+        else
+            sTexSize3 = sceGxmProgramFindParameterByName(sceGxmShaderPatcherGetProgramFromId(sF3id), "texSize");
+        if (!sTexSize3)
+            sFp3 = NULL;
+        Platform_Log("[hq] Scale3x %s\n", sFp3 ? "ready" : "not available");
+    }
     Platform_Log("[hq] ready\n");
     sState = 1;
     return 1;
 }
 
-void VitaHq_Draw(vita2d_texture *t, float x, float y, float sx, float sy, float w, float h, float scale)
+static void DrawWith(SceGxmFragmentProgram *prog, const SceGxmProgramParameter *texSize,
+                     vita2d_texture *t, float x, float y, float sx, float sy, float w, float h, float scale)
 {
     SceGxmContext *ctx = vita2d_get_context();
     vita2d_texture_vertex *v = vita2d_pool_memalign(4 * sizeof(vita2d_texture_vertex), sizeof(vita2d_texture_vertex));
@@ -197,12 +262,29 @@ void VitaHq_Draw(vita2d_texture *t, float x, float y, float sx, float sy, float 
     v[3].x = x1; v[3].y = y1; v[3].z = 0.5f; v[3].u = u1; v[3].v = v1;
     vita2d_texture_set_filters(t, SCE_GXM_TEXTURE_FILTER_POINT, SCE_GXM_TEXTURE_FILTER_POINT);
     sceGxmSetVertexProgram(ctx, sVp);
-    sceGxmSetFragmentProgram(ctx, sFp);
+    sceGxmSetFragmentProgram(ctx, prog);
     sceGxmReserveVertexDefaultUniformBuffer(ctx, &buf);
     sceGxmSetUniformDataF(buf, sWvp, 0, 16, wvp);
     sceGxmReserveFragmentDefaultUniformBuffer(ctx, &buf);
-    sceGxmSetUniformDataF(buf, sTexSize, 0, 2, ts);
+    sceGxmSetUniformDataF(buf, texSize, 0, 2, ts);
     sceGxmSetFragmentTexture(ctx, 0, &t->gxm_tex);
     sceGxmSetVertexStream(ctx, 0, v);
     sceGxmDraw(ctx, SCE_GXM_PRIMITIVE_TRIANGLE_STRIP, SCE_GXM_INDEX_FORMAT_U16, vita2d_get_linear_indices(), 4);
+}
+
+void VitaHq_Draw(vita2d_texture *t, float x, float y, float sx, float sy, float w, float h, float scale)
+{
+    DrawWith(sFp, sTexSize, t, x, y, sx, sy, w, h, scale);
+}
+
+int VitaHq_Scale3xAvailable(void)
+{
+    return VitaHq_Available() && sFp3;
+}
+
+void VitaHq_DrawScale3x(vita2d_texture *t, float x, float y, float w, float h)
+{
+    sceGxmTextureSetUAddrMode(&t->gxm_tex, SCE_GXM_TEXTURE_ADDR_CLAMP);
+    sceGxmTextureSetVAddrMode(&t->gxm_tex, SCE_GXM_TEXTURE_ADDR_CLAMP);
+    DrawWith(sFp3, sTexSize3, t, x, y, 0, 0, w, h, 3.0f);
 }
