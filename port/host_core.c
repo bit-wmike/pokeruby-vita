@@ -270,6 +270,18 @@ static void RenderFrame(void)
 #endif
     wide = PortView_BeginFrame();
 #ifndef __vita__
+    if (getenv("PKR_CB_LOG"))
+        fprintf(stderr, "[cb] f%u cb2=%p wide=%d\n", Port_FrameCounter(), (void *)gMain.callback2, wide);
+    if (getenv("PKR_KNOB_LOG") && Port_FrameCounter() >= (u32)atoi(getenv("PKR_KNOB_LOG")) && Port_FrameCounter() < (u32)atoi(getenv("PKR_KNOB_LOG")) + 3) {
+        int b;
+        fprintf(stderr, "[knob] f%u wide=%d dispcnt=%04x win0h=%04x winin=%04x winout=%04x wdx=%d bldcnt=%04x\n", Port_FrameCounter(), wide,
+                gHostIo[0] | gHostIo[1] << 8, gHostIo[0x40] | gHostIo[0x41] << 8, gHostIo[0x48] | gHostIo[0x49] << 8, gHostIo[0x4A] | gHostIo[0x4B] << 8,
+                virtuappu_mode1_win_dx, gHostIo[0x50] | gHostIo[0x51] << 8);
+        for (b = 0; b < 4; b++)
+            fprintf(stderr, "  bg%d clip %d %d-%d dx %d ovr %x regions %d\n", b, virtuappu_mode1_bg_clip_on[b], virtuappu_mode1_bg_clip_x0[b], virtuappu_mode1_bg_clip_x1[b], virtuappu_mode1_bg_dx[b], virtuappu_mode1_bg_screen_override[b], virtuappu_mode1_bg_region_count[b]);
+    }
+#endif
+#ifndef __vita__
     {   /* host: PKR_HIDE=mask clears DISPCNT layer bits for the picture */
         static int hide = -1;
         if (hide < 0) hide = getenv("PKR_HIDE") ? (int)strtol(getenv("PKR_HIDE"), NULL, 16) : 0;

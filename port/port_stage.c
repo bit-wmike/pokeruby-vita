@@ -807,6 +807,7 @@ static void ClearKnobs(void)
     }
     virtuappu_mode1_backdrop_key = KEY;
     virtuappu_mode1_win_dx = virtuappu_mode1_win_dy = 0;
+    virtuappu_mode1_win_port = 1;
     virtuappu_mode1_line_dy = 0;
     virtuappu_mode1_obj_port = 1;
     for (i = 0; i < 128; i++) {
@@ -1245,24 +1246,58 @@ static int FadeAmount(int *white)
         fprintf(stderr, "[fade] f%u act%d sel%08X y%d bc%04X  bd %04X/%04X p1 %04X/%04X\n", Port_FrameCounter(), gPaletteFade.active,
                 (unsigned)gPaletteFade.multipurpose1, gPaletteFade.y, c, gPlttBufferFaded[0], gPlttBufferUnfaded[0], gPlttBufferFaded[1], gPlttBufferUnfaded[1]);
 #endif
-    if (!(gPaletteFade.multipurpose1 & 1)) {  /* backdrop palette not faded */
-        /* ... or the fade has ended with the screen dark: the selection is
-         * cleared then, the palettes stay black (the battle menus' fade:
-         * the stage came back around black silhouettes; Mike, 0.3.12) */
-        int i, n = 0;
-        if (gPaletteFade.y < 16)
-            return 0;
+    if (!(gPaletteFade.multipurpose1 & 1)) {
+        /* no normal fade of the backdrop: measured from the palettes - an
+         * ended fade (the selection cleared, the palettes still dark) and
+         * the fast fades (battle end) darken them all alike; the stage goes
+         * along, else black silhouettes on it (Mike, 0.3.12/0.3.15) */
+        int i, n = 0, dark = 0, light = 0, kd = 1, kl = 1, hd[32] = {0}, hl[32] = {0};
+        long su = 0, sf = 0, sw = 0;
         for (i = 1; i < 512; i++) {
-            if (gPlttBufferUnfaded[i] == c || (i & 15) == 0)
+            u16 u = gPlttBufferUnfaded[i], f = gPlttBufferFaded[i];
+            int lu, lf;
+            if ((i & 15) == 0)
                 continue;
-            if (gPlttBufferFaded[i] != c)
-                return 0;
+            lu = (u & 31) + ((u >> 5) & 31) + ((u >> 10) & 31);
+            lf = (f & 31) + ((f >> 5) & 31) + ((f >> 10) & 31);
+            if (lu < 6 || lu > 87)   /* black or white: no measure */
+                continue;
             n++;
+            {   /* the step of the colour (largest of its channels) */
+                int ch, md = 0, ml = 0;
+                for (ch = 0; ch < 15; ch += 5) {
+                    int d = (int)((u >> ch) & 31) - (int)((f >> ch) & 31);
+                    if (d > md) md = d;
+                    if (-d > ml) ml = -d;
+                }
+                hd[md]++;
+                hl[ml]++;
+            }
+            dark += lf < lu;
+            light += lf > lu;
+            su += lu; sf += lf; sw += 93 - lu;
         }
-        if (n < 8)
+        if (n < 32)
             return 0;
-        *white = (c & 31) + ((c >> 5) & 31) + ((c >> 10) & 31) > 45;
-        return 256;
+        for (i = 1; i < 32; i++) {   /* the most common step: the fade's */
+            if (hd[i] > hd[kd]) kd = i;
+            if (hl[i] > hl[kl]) kl = i;
+        }
+        /* how far the colours went, on the 0..31 scale (the fast fades
+         * step every channel by the same amount) */
+#ifndef __vita__
+        if (getenv("PKR_MFADE_LOG") && (dark * 10 >= n * 9 || light * 10 >= n * 9))
+            fprintf(stderr, "[mfade] f%u d%d l%d n%d kd%d kl%d\n", Port_FrameCounter(), dark, light, n, kd, kl);
+#endif
+        if (dark * 10 >= n * 9) {
+            *white = 0;
+            return sf == 0 ? 256 : kd * 256 / 31;
+        }
+        if (light * 10 >= n * 9) {
+            *white = 1;
+            return sw == 0 || sf >= (long)n * 93 ? 256 : kl * 256 / 31;
+        }
+        return 0;
     }
     *white = (c & 31) + ((c >> 5) & 31) + ((c >> 10) & 31) > 45;
     return gPaletteFade.y * 16;
@@ -1415,6 +1450,8 @@ static void Unframe(u32 *ui, int pitch, const virtuappu_mode1_region *g)
 /* shadows under the battlers' sprites (Pokemon, or the trainer while it is
  * on the field): where the figure is across, on its side's ground line */
 static PortShadow sShadow[4];
+static int IsTrainerPic(const struct Sprite *sp);
+extern const union AnimCmd *const gSpriteAnimTable_81E7C64[];
 extern u8 gBattlerSpriteIds[], gBattlersCount;
 u8 GetBattlerSpriteCoord(u8, u8);
 u8 GetBattlerSide(u8);
@@ -1430,10 +1467,16 @@ static int Shadows(void)
         if (id >= MAX_SPRITES)
             continue;
         sp = &gSprites[id];
-        if (!sp->inUse || sp->invisible || (sp->oam.affineMode && gOamMatrices[sp->oam.matrixNum].a < 0xE0))   /* growing from / into the ball */
+        /* only the battler's own picture (a Pokemon or its trainer) - the
+         * id can point at a reused slot (a move's particle) after a faint;
+         * not while it grows from / shrinks into the ball */
+        if (!sp->inUse || sp->invisible || (sp->oam.affineMode && gOamMatrices[sp->oam.matrixNum].a < 0xE0) ||
+            (sp->anims != gSpriteAnimTable_81E7C64 && !IsTrainerPic(sp)))
             continue;
         gy = GetBattlerSpriteCoord(b, 1) + (foe ? 34 : 30);
-        sShadow[n].cx = (int16_t)SX(sp->x + sp->x2);
+        /* the place, not a move's shaking or lunging: only the slides in
+         * and out (big offsets) move the shadow (Mike, 0.3.15) */
+        sShadow[n].cx = (int16_t)SX(sp->x + (sp->x2 >= 40 || sp->x2 <= -40 ? sp->x2 : 0));
         sShadow[n].cy = (int16_t)SY(gy);
         sShadow[n].rx = foe ? 50 : 70;
         sShadow[n].ry = foe ? 12 : 14;

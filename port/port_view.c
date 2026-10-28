@@ -220,6 +220,10 @@ static void FillWorld(void)
                     sAltCells[i0] = sAltCells[i0 + 1] = sAltCells[i0 + 32] = sAltCells[i0 + 33] = 1;
                 }
             }
+#ifndef __vita__
+            if (getenv("PKR_FW_LOG") && Port_FrameCounter() == (u32)atoi(getenv("PKR_FW_LOG")) && my == my0 + 6)
+                fprintf(stderr, "[fw] mx=%d onGba=%d t=%04x %04x %04x fx=%d wx=%d\n", mx, onGba, t[1][0], t[2][0], t[3][0], left, sSnap.wx);
+#endif
             for (b = 1; b <= 3; b++) {
                 *WideEntry(b, tx, ty) = t[b][0];
                 *WideEntry(b, tx + 1, ty) = t[b][1];
@@ -254,6 +258,7 @@ static void Reset(void)
         virtuappu_mode1_bg_region_count[b] = 0;
     }
     virtuappu_mode1_win_dx = virtuappu_mode1_win_dy = 0;
+    virtuappu_mode1_win_port = 0;
     virtuappu_mode1_line_dy = 0;
     virtuappu_mode1_obj_port = 0;
     for (i = 0; i < 128; i++)
@@ -500,6 +505,7 @@ int PortView_BeginFrame(void)
 
     virtuappu_mode1_win_dx = ox;
     virtuappu_mode1_win_dy = oy;
+    virtuappu_mode1_win_port = 1;   /* also when the GBA screen sits at 0 (Mike's shipyard flash) */
     virtuappu_mode1_line_dy = oy;
     if (PortFieldMoveShowMonActive()) {   /* its window: the middle of the frame */
         virtuappu_mode1_win_dx = (PORT_WIDE_W - PORT_GBA_W) / 2;

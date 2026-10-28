@@ -68,15 +68,17 @@ int virtuappu_mode1_no_winopt; /* host benchmarks */
 static uint32_t mode1_backdrop_key_last;
 
 /* Window edges in GBA-screen coordinates -> wide frame coordinates. */
+int virtuappu_mode1_win_port;   /* window edges mapped even at offset 0 */
 static inline void mode1_port_window(int* left, int* right, int* top, int* bottom) {
-    if (virtuappu_mode1_win_dx && *left == *right)
+    const bool port = virtuappu_mode1_win_port || virtuappu_mode1_win_dx || virtuappu_mode1_win_dy;
+    if (port && *left == *right)
         return;   /* an empty window (Flash's darkness above and below the
                    * light) stays empty in the wide view */
-    if (virtuappu_mode1_win_dx) {
+    if (port) {
         *left = *left == 0 ? 0 : *left + virtuappu_mode1_win_dx;
         *right = *right >= 240 ? 1024 : *right + virtuappu_mode1_win_dx;
     }
-    if (virtuappu_mode1_win_dy) {
+    if (port) {
         *top = *top == 0 ? 0 : *top + virtuappu_mode1_win_dy;
         *bottom = *bottom >= 160 ? 1024 : *bottom + virtuappu_mode1_win_dy;
     }
