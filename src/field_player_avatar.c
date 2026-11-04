@@ -617,7 +617,7 @@ static bool8 sub_8058EF0(s16 x, s16 y, u8 direction)
 {
     if ((gPlayerAvatar.flags & PLAYER_AVATAR_FLAG_SURFING)
      && MapGridGetElevationAt(x, y) == 3
-     && GetObjectEventIdByXYZ(x, y, 3) == 16)
+     && GetObjectEventIdByXYZ(x, y, 3) == OBJECT_EVENTS_COUNT)
     {
         sub_805A20C(direction);
         return TRUE;
@@ -642,7 +642,7 @@ static u8 sub_8058F6C(s16 x, s16 y, u8 direction)
     {
         u8 objectEventId = GetObjectEventIdByXY(x, y);
 
-        if (objectEventId != 16 && gObjectEvents[objectEventId].graphicsId == OBJ_EVENT_GFX_PUSHABLE_BOULDER)
+        if (objectEventId != OBJECT_EVENTS_COUNT && gObjectEvents[objectEventId].graphicsId == OBJ_EVENT_GFX_PUSHABLE_BOULDER)
         {
             x = gObjectEvents[objectEventId].currentCoords.x;
             y = gObjectEvents[objectEventId].currentCoords.y;

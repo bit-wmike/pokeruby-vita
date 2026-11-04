@@ -1298,6 +1298,19 @@ void RemoveAllObjectEventsExceptPlayer(void)
     }
 }
 
+#ifdef PORT
+#define PORT_SPRITE_RESERVE 24
+static bool8 sPortAmbientSpawn; // TrySpawnObjectEvents (not script addobject)
+
+static int PortFreeSprites(void)
+{
+    int i, n = 0;
+    for (i = 0; i < MAX_SPRITES; i++)
+        n += !gSprites[i].inUse;
+    return n;
+}
+#endif
+
 static u8 TrySetupObjectEventSprite(const struct ObjectEventTemplate *objectEventTemplate, struct SpriteTemplate *spriteTemplate, u8 mapNum, u8 mapGroup, s16 cameraDeltaX, s16 cameraDeltaY)
 {
     u8 spriteId;
@@ -1325,6 +1338,13 @@ static u8 TrySetupObjectEventSprite(const struct ObjectEventTemplate *objectEven
         objectEvent->invisible = TRUE;
     }
     *(u16 *)&spriteTemplate->paletteTag = 0xFFFF;
+#ifdef PORT
+    // Objects beyond the GBA's 16 (wide view) only while enough sprites stay
+    // free for shadows, reflections, field effects and battle transitions.
+    if (sPortAmbientSpawn && objectEventId >= OBJECT_EVENTS_SAVE_COUNT && PortFreeSprites() < PORT_SPRITE_RESERVE)
+        spriteId = MAX_SPRITES;
+    else
+#endif
     spriteId = CreateSprite(spriteTemplate, 0, 0, 0);
     if (spriteId == MAX_SPRITES)
     {
@@ -1528,7 +1548,15 @@ void TrySpawnObjectEvents(s16 cameraDeltaX, s16 cameraDeltaY)
 
             if (top <= npcY && bottom >= npcY && left <= npcX && right >= npcX
              && !FlagGet(template->flagId))
+            {
+#ifdef PORT
+                sPortAmbientSpawn = TRUE;
+#endif
                 TrySpawnObjectEvent(template, gSaveBlock1.location.mapNum, gSaveBlock1.location.mapGroup, cameraDeltaX, cameraDeltaY);
+#ifdef PORT
+                sPortAmbientSpawn = FALSE;
+#endif
+            }
         }
     }
 }

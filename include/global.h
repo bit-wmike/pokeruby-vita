@@ -696,7 +696,7 @@ struct SaveBlock1 /* 0x02025734 */
     /*0x972*/ u8 filler_972[0x6];
     /*0x978*/ u16 trainerRematchStepCounter;
     /*0x97A*/ u8 trainerRematches[MAX_REMATCH_ENTRIES];
-    /*0x9E0*/ struct ObjectEvent objectEvents[OBJECT_EVENTS_COUNT];
+    /*0x9E0*/ struct ObjectEvent objectEvents[OBJECT_EVENTS_SAVE_COUNT];
     /*0xC20*/ struct ObjectEventTemplate objectEventTemplates[OBJECT_EVENT_TEMPLATES_COUNT];
     /*0x1220*/ u8 flags[FLAGS_COUNT];
     /*0x1340*/ u16 vars[VARS_COUNT];

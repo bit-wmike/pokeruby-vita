@@ -428,14 +428,18 @@ static void Shop_LoadViewportObjects(void)
     GetXYCoordsOneStepInFrontOfPlayer(&facingX, &facingY);
     playerHeight = PlayerGetZCoord();
     for (y = 0; y < 16; y++)
-        gMartViewportObjects[y][OBJ_EVENT_ID] = 16;
+        gMartViewportObjects[y][OBJ_EVENT_ID] = OBJECT_EVENTS_COUNT;
     for (y = 0; y < 5; y++)
     {
         for (x = 0; x < 7; x++)
         {
             u8 objEventId = GetObjectEventIdByXYZ(facingX - 3 + x, facingY - 2 + y, playerHeight);
 
+#ifdef PORT
+            if (objEventId != OBJECT_EVENTS_COUNT && r8 < 16)
+#else
             if (objEventId != 16)
+#endif
             {
                 gMartViewportObjects[r8][OBJ_EVENT_ID] = objEventId;
                 gMartViewportObjects[r8][X_COORD] = x;
@@ -460,7 +464,7 @@ static void Shop_AnimViewportObjects(void)
 
     for (i = 0; i < 16; i++) // max objects?
     {
-        if (gMartViewportObjects[i][OBJ_EVENT_ID] == 16)
+        if (gMartViewportObjects[i][OBJ_EVENT_ID] == OBJECT_EVENTS_COUNT)
             continue;
 
         StartSpriteAnim(&gSprites[AddPseudoObjectEvent(

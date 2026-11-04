@@ -1492,6 +1492,9 @@ void CB2_ContinueSavedGame(void)
     LoadSaveblockMapHeader();
     LoadSaveblockObjEventScripts();
     UnfreezeObjectEvents();
+#ifdef PORT
+    PortObjectEvents_RequestAfterLoad();
+#endif
     DoTimeBasedEvents();
     sub_805308C();
     InitMapFromSavedGame();
@@ -1879,6 +1882,9 @@ void mli4_mapscripts_and_other(void)
 void sub_8054E20(void)
 {
     sub_805B710(0, 0);
+#ifdef PORT
+    PortObjectEvents_AfterLoad();
+#endif
     RotatingGate_InitPuzzleAndGraphics();
 }
 
@@ -2727,7 +2733,7 @@ static u8 npc_something3(u8 a1, u8 a2)
 static u8 LinkPlayerDetectCollision(u8 selfObjEventId, u8 a2, s16 x, s16 y)
 {
     u8 i;
-    for (i = 0; i < 16; i++)
+    for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
     {
         if (i != selfObjEventId)
         {

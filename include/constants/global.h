@@ -41,7 +41,17 @@
 // capacities of various saveblock objects
 #define DAYCARE_MON_COUNT   2
 #define POKEBLOCKS_COUNT    40
+// Object events in the save file (gSaveBlock1.objectEvents) - fixed, the flash
+// save stays compatible with the GBA game and emulators.
+#define OBJECT_EVENTS_SAVE_COUNT 16
+#ifdef PORT
+// Port, wide view (480x272 shows about twice the GBA screen): more object
+// events at runtime, otherwise people in busy towns/routes appear late at the
+// edge. Saving keeps the 16 nearest the player (src/load_save.c).
+#define OBJECT_EVENTS_COUNT 32
+#else
 #define OBJECT_EVENTS_COUNT 16
+#endif
 #define BERRY_TREES_COUNT   128
 #define FLAGS_COUNT         288
 #define VARS_COUNT          256

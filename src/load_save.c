@@ -4,6 +4,10 @@
 #include "main.h"
 #include "pokemon.h"
 #include "overworld.h"
+#ifdef PORT
+#include <string.h>
+#include "event_object_movement.h"
+#endif
 
 extern u8 gPlayerPartyCount;
 
@@ -81,6 +85,92 @@ void LoadPlayerParty(void)
         gPlayerParty[i] = gSaveBlock1.playerParty[i];
 }
 
+#ifdef PORT
+// The port keeps up to OBJECT_EVENTS_COUNT (32) object events at runtime, the
+// save file only OBJECT_EVENTS_SAVE_COUNT (16, GBA layout). If all active ones
+// sit in the first 16 slots the copy is the original one; otherwise the player
+// and the objects nearest to him are kept (in slot order), the others spawn
+// again from the map templates after loading (PortObjectEvents_AfterLoad).
+static bool8 sPortObjectsLoaded;
+
+static void SaveObjectEvents(void)
+{
+    int i, j, n = 0;
+    u8 keep[OBJECT_EVENTS_COUNT];
+    int dist[OBJECT_EVENTS_COUNT];
+    s16 px = 0, py = 0;
+
+    for (i = OBJECT_EVENTS_SAVE_COUNT; i < OBJECT_EVENTS_COUNT; i++)
+        if (gObjectEvents[i].active)
+            break;
+    if (i == OBJECT_EVENTS_COUNT)
+    {
+        for (i = 0; i < OBJECT_EVENTS_SAVE_COUNT; i++)
+            gSaveBlock1.objectEvents[i] = gObjectEvents[i];
+        return;
+    }
+    for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
+        if (gObjectEvents[i].active && gObjectEvents[i].isPlayer)
+            px = gObjectEvents[i].currentCoords.x, py = gObjectEvents[i].currentCoords.y;
+    for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
+    {
+        struct ObjectEvent *o = &gObjectEvents[i];
+        int dx, dy;
+        keep[i] = 0;
+        if (!o->active)
+        {
+            dist[i] = 0x7FFFFFFF;
+            continue;
+        }
+        dx = o->currentCoords.x - px;
+        dy = o->currentCoords.y - py;
+        dist[i] = o->isPlayer ? -1 : (dx < 0 ? -dx : dx) + (dy < 0 ? -dy : dy);
+    }
+    // pick the OBJECT_EVENTS_SAVE_COUNT smallest distances (player first, ties by slot)
+    for (n = 0; n < OBJECT_EVENTS_SAVE_COUNT; n++)
+    {
+        int best = -1;
+        for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
+            if (!keep[i] && dist[i] != 0x7FFFFFFF && (best < 0 || dist[i] < dist[best]))
+                best = i;
+        if (best < 0)
+            break;
+        keep[best] = 1;
+    }
+    for (i = 0, j = 0; i < OBJECT_EVENTS_COUNT; i++)
+        if (keep[i])
+            gSaveBlock1.objectEvents[j++] = gObjectEvents[i];
+    for (; j < OBJECT_EVENTS_SAVE_COUNT; j++)
+        memset(&gSaveBlock1.objectEvents[j], 0, sizeof(gSaveBlock1.objectEvents[j]));
+}
+
+static void LoadObjectEvents(void)
+{
+    int i;
+
+    for (i = 0; i < OBJECT_EVENTS_SAVE_COUNT; i++)
+        gObjectEvents[i] = gSaveBlock1.objectEvents[i];
+    for (; i < OBJECT_EVENTS_COUNT; i++)
+        memset(&gObjectEvents[i], 0, sizeof(gObjectEvents[i]));
+}
+
+// Called once the loaded objects have their sprites again (continue game):
+// spawn the people of the current map the save file had no room for.
+void PortObjectEvents_AfterLoad(void)
+{
+    if (sPortObjectsLoaded)
+    {
+        sPortObjectsLoaded = FALSE;
+        TrySpawnObjectEvents(0, 0);
+    }
+}
+
+// CB2_ContinueSavedGame: the objects came from the save file.
+void PortObjectEvents_RequestAfterLoad(void)
+{
+    sPortObjectsLoaded = TRUE;
+}
+#else
 static void SaveObjectEvents(void)
 {
     int i;
@@ -96,6 +186,7 @@ static void LoadObjectEvents(void)
     for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
         gObjectEvents[i] = gSaveBlock1.objectEvents[i];
 }
+#endif
 
 void SaveSerializedGame(void)
 {

@@ -41,7 +41,7 @@ bool8 CheckTrainers(void)
 {
     u8 objEventId;
 
-    for (objEventId = 0; objEventId < 16; objEventId++)
+    for (objEventId = 0; objEventId < OBJECT_EVENTS_COUNT; objEventId++)
     {
         if (gObjectEvents[objEventId].active
          && (gObjectEvents[objEventId].trainerType == TRAINER_TYPE_NORMAL ||  gObjectEvents[objEventId].trainerType == TRAINER_TYPE_BURIED)

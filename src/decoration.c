@@ -2460,7 +2460,7 @@ bool8 sub_80FFC24(u8 taskId, const struct Decoration *decoration)
                     {
                         return FALSE;
                     }
-                    if (GetObjectEventIdByXYZ(curX, curY, 0) != 16)
+                    if (GetObjectEventIdByXYZ(curX, curY, 0) != OBJECT_EVENTS_COUNT)
                     {
                         return FALSE;
                     }
@@ -2525,7 +2525,7 @@ bool8 sub_80FFC24(u8 taskId, const struct Decoration *decoration)
                         return FALSE;
                     }
                 }
-                if (GetObjectEventIdByXYZ(curX, curY, 0) != 16)
+                if (GetObjectEventIdByXYZ(curX, curY, 0) != OBJECT_EVENTS_COUNT)
                 {
                     return FALSE;
                 }

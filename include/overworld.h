@@ -213,4 +213,10 @@ void CB2_InitTestMenu(void);
 void debug_sub_8058C00(void);
 void sub_80546B8(void);
 
+#ifdef PORT
+// src/load_save.c: respawn the objects the 16-slot save file had no room for
+void PortObjectEvents_RequestAfterLoad(void);
+void PortObjectEvents_AfterLoad(void);
+#endif
+
 #endif // GUARD_ROM4_H

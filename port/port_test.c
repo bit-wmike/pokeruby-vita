@@ -26,6 +26,7 @@ void sub_809D844(void);
 #include "global.fieldmap.h"
 #include "constants/species.h"
 #include "event_data.h"
+#include "sprite.h"
 
 #include "port/port.h"
 
@@ -344,8 +345,47 @@ static void TestSpecies(void)
     cur++;
 }
 
+/* PKR_OBJ_LOG=k: every k frames in the overworld: active object events, templates
+   inside the spawn rectangle that are not spawned (list full), free sprites. */
+static void ObjLog(void)
+{
+    extern struct ObjectEvent gObjectEvents[];
+    int PortViewObjectExtraX(void);
+    int PortViewObjectExtraY(void);
+    const char *e = getenv("PKR_OBJ_LOG");
+    int k = e ? atoi(e) : 0, i, j, act = 0, inr = 0, miss = 0, spr = 0;
+    s16 l, r, t, b;
+    if (k <= 0 || Port_FrameCounter() % k || !PortIsOverworld() || gMapHeader.events == NULL)
+        return;
+    for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
+        act += gObjectEvents[i].active;
+    for (i = 0; i < MAX_SPRITES; i++)
+        spr += gSprites[i].inUse;
+    l = gSaveBlock1.pos.x - 2 - (PortViewObjectExtraX() + 15) / 16;
+    r = gSaveBlock1.pos.x + 17 + (PortViewObjectExtraX() + 15) / 16;
+    t = gSaveBlock1.pos.y - (PortViewObjectExtraY() + 15) / 16;
+    b = gSaveBlock1.pos.y + 16 + (PortViewObjectExtraY() + 15) / 16;
+    for (i = 0; i < gMapHeader.events->objectEventCount; i++) {
+        struct ObjectEventTemplate *tp = &gSaveBlock1.objectEventTemplates[i];
+        s16 x = tp->x + 7, y = tp->y + 7;
+        if (x < l || x > r || y < t || y > b || FlagGet(tp->flagId))
+            continue;
+        inr++;
+        for (j = 0; j < OBJECT_EVENTS_COUNT; j++)
+            if (gObjectEvents[j].active && gObjectEvents[j].localId == tp->localId
+             && gObjectEvents[j].mapNum == gSaveBlock1.location.mapNum
+             && gObjectEvents[j].mapGroup == gSaveBlock1.location.mapGroup)
+                break;
+        miss += j == OBJECT_EVENTS_COUNT;
+    }
+    fprintf(stderr, "[obj] %u map %d.%d (%d,%d) active=%d/%d inrange=%d missing=%d sprites=%d/%d\n",
+            Port_FrameCounter(), gSaveBlock1.location.mapGroup, gSaveBlock1.location.mapNum,
+            gSaveBlock1.pos.x, gSaveBlock1.pos.y, act, OBJECT_EVENTS_COUNT, inr, miss, spr, MAX_SPRITES);
+}
+
 void PortTest_Frame(void)
 {
+    ObjLog();
     static int ioDumped;
     if (!ioDumped && getenv("PKR_IO_DUMP") && Port_FrameCounter() >= (u32)atoi(getenv("PKR_IO_DUMP"))) {
         ioDumped = 1;

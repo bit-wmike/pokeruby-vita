@@ -51,3 +51,4 @@ prefabs.json
 
 # Vita port: personal LiveArea artwork (not part of the repository)
 /platform/vita/sce_sys_local_*/
+tools/port/__pycache__/

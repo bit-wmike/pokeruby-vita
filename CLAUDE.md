@@ -122,8 +122,9 @@ Kartengrenzen in der Bühne, Ballwurf im Doppel, Flash, Leitern, Musik, Item-Edi
   Himmelssäule.
 
 ### Bekannte Grenzen / offene Punkte
-- NPCs erscheinen in vollen Städten (Graphitport) spät am Rand: das Spiel verwaltet max. 16 aktive
-  Personen (auch im Spielstand). Bewusst nicht geändert.
+- NPC-Limit: am Port 32 aktive Personen (`OBJECT_EVENTS_COUNT`), Spielstand bleibt bei 16
+  (`OBJECT_EVENTS_SAVE_COUNT`, beim Speichern Spieler + 15 nächste). Sprite-Reserve 24/64 für
+  Personen ab Platz 17. Diagnose `PKR_OBJ_LOG=k`. Wettbewerbshalle Seegrasulb braucht 33 → 1 fehlt.
 - Attacken 253 (Aufruhr) und 258 (Hagel) hängen im automatischen Attacken-Test (Testskript, kein
   Absturz); Attacke ~250 beendet den Testkampf → Test ab 254/259 neu starten.
 - VM-Einblendung: beim Aufgehen des Fensters ein kurzer Ein-Frame-Rest links (Übergang).
@@ -138,14 +139,14 @@ Skripte in `tools/port/test/` (Ausgabe nach `$PKR_TEST_DIR`, Standard `/tmp/pkr`
 `tools/port/test/test.sav` (Testspielstand, Team mit Moorabbel Lv. 22):
 ```
 F=2600 tools/port/test/battle.sh r104 0:19:3:9 25 2450,2500 [VAR=..]   # wilder Kampf (Pikachu) auf Route 104
-F=2200 tools/port/test/field.sh yard 9:0:4:8 "1760:16:120"               # Oberwelt, Eingaben ab 1760
+F=2200 tools/port/test/field.sh yard 9:0:4:8 "1760:10:120"               # Oberwelt, Eingaben ab 1760
 python3 tools/port/test/sheet.py out.png 8 240 /tmp/pkr/r104/frame_0*.ppm # Kontaktbogen
 HOSTBIN=tools/port/test/qarm.sh tools/port/test/battle.sh ...              # ARM-Build unter qemu
 python3 tools/port/test/gen_sweep_plans.py 16                              # Karten/NPC-Sweep-Pläne
 ```
 Wichtige Env-Variablen (alle in `port/port_test.c`, `platform/host/main_host.c`, `port/*.c`):
 - Ablauf: `PKR_FRAMES, PKR_OUT, PKR_SHOT=a,b, PKR_SHOT_EVERY=k, PKR_INPUT="frame:keys:len,..."`
-  (GBA-Bits A 1, B 2, SELECT 4, START 8, RIGHT 16, LEFT 32, UP 64, DOWN 128), `PKR_AUTO_A=frame`,
+  (Tasten **hexadezimal**: A 1, B 2, SELECT 4, START 8, RIGHT 10, LEFT 20, UP 40, DOWN 80), `PKR_AUTO_A=frame`,
   `PKR_SAVE, PKR_TIME, PKR_VIEW=0|1, PKR_NOAUDIO, PKR_HOENN, PKR_EXP, PKR_DOUBLES=prozent`.
 - Szenen: `PKR_TEST_WARP=frame:g:n:x:y`, `PKR_TEST_BATTLE=frame:species:level`, `PKR_TEST_TRAINER`,
   `PKR_TEST_MOVES=erste` (beide Seiten benutzen jede Attacke ab Nummer), `PKR_TEST_PLAN=datei`
