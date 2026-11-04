@@ -251,6 +251,19 @@ static void MakeBackdrop(const uint32_t *src, int pitch)
 
 #define FIELD_W 480   /* pitch (the renderer wants at least 480) */
 
+/* render time per pass for the log (port_log.c); k 6 ends the frame */
+static void PassMark(int k, uint64_t *t0)
+{
+    uint64_t t = Platform_TimeUs();
+    if (k < PORT_PASS_WIDE) {
+        uint32_t d = (uint32_t)(t - *t0);
+        gPortPassUs[k] += d;
+        gPortPassN[k]++;
+        gPortPassLast[k] = d;
+    }
+    *t0 = t;
+}
+
 static void RenderFrame(void)
 {
     static int bound;
@@ -364,13 +377,14 @@ static void RenderFrame(void)
         static double acc[8]; static int nacc, ncnt[8]; struct timespec ts0, ts1;
         /* host diagnostics: time per pass, averaged over 200 battle frames
          * (field, intro, bgfill, ui, hud, present = port side + CPU compose) */
-#define STAGE_T(k) do { clock_gettime(CLOCK_MONOTONIC, &ts1); acc[k] += (ts1.tv_sec - ts0.tv_sec) * 1e6 + (ts1.tv_nsec - ts0.tv_nsec) / 1e3; ncnt[k]++; ts0 = ts1; \
+#define STAGE_T(k) do { PassMark(k, &pt0); clock_gettime(CLOCK_MONOTONIC, &ts1); acc[k] += (ts1.tv_sec - ts0.tv_sec) * 1e6 + (ts1.tv_nsec - ts0.tv_nsec) / 1e3; ncnt[k]++; ts0 = ts1; \
     if (k == 6 && ++nacc == 200) { if (getenv("PKR_STAGE_TIME")) fprintf(stderr, "[stage] field %.0f intro %.0f/%d fill %.0f/%d ui %.0f hud %.0f/%d prep %.0f compose %.0f us | sum %.0f\n", acc[0] / 200, acc[1] / 200, ncnt[1], acc[2] / 200, ncnt[2], acc[3] / 200, acc[4] / 200, ncnt[4], (acc[5] - gPortComposeUs) / 200, gPortComposeUs / 200, (acc[0]+acc[1]+acc[2]+acc[3]+acc[4]+acc[5]) / 200); memset(acc, 0, sizeof(acc)); memset(ncnt, 0, sizeof(ncnt)); gPortComposeUs = 0; nacc = 0; } } while (0)
         extern double gPortComposeUs;
         clock_gettime(CLOCK_MONOTONIC, &ts0);
 #else
-#define STAGE_T(k) do {} while (0)
+#define STAGE_T(k) PassMark(k, &pt0)
 #endif
+        uint64_t pt0 = Platform_TimeUs();
         PortStage_FieldPass(&fw, &fh);
         memset(&ppu, 0, sizeof(ppu));
         ppu.frame_width = (uint16_t)fw;
@@ -462,7 +476,13 @@ static void RenderFrame(void)
     virtuappu_mode1_pre_line_callback = PreLine;
     sRendering = 1;
     Port_ProfileBegin(PORT_PROF_RENDER);
-    virtuappu_mode1_render_frame(&ppu);
+    {
+        uint64_t t0 = Platform_TimeUs();
+        virtuappu_mode1_render_frame(&ppu);
+        gPortPassLast[PORT_PASS_WIDE] = (uint32_t)(Platform_TimeUs() - t0);
+        gPortPassUs[PORT_PASS_WIDE] += gPortPassLast[PORT_PASS_WIDE];
+        gPortPassN[PORT_PASS_WIDE]++;
+    }
     Port_ProfileEnd(PORT_PROF_RENDER);
     sRendering = 0;
 
@@ -556,6 +576,7 @@ static void HostRunFrame(void)
         void PortTest_Frame(void);
         PortTest_Frame();
     }
+    Port_LogFrame();
     sFrameCounter++;
 }
 

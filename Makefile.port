@@ -154,6 +154,9 @@ $(BUILD)/port/%.o: port/%.c tools/port/naked2c.py
 	@$(PYTHON) tools/port/naked2c.py $(BUILD)/port/$*.i $(BUILD)/port/$*.pp.c
 	$(CC) $(PORT_CFLAGS) -c -x c $(BUILD)/port/$*.pp.c -o $@
 
+# the savestate carries the version (port_state.c)
+$(BUILD)/port/port_state.o: platform/vita/VERSION
+
 $(BUILD)/platform/%.o: platform/%.c tools/port/naked2c.py platform/vita/VERSION
 	@mkdir -p $(dir $@)
 	@$(CC) $(ARCHFLAGS) -std=gnu11 -E $(GAME_DEFS) $(PPU_DEFS) $(INCLUDES) $< -o $(BUILD)/platform/$*.i

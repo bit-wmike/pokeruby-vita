@@ -48,6 +48,15 @@ void Port_ProfileBegin(int what);
 void Port_ProfileEnd(int what);
 unsigned Port_ProfileAverageUs(int what);
 uint64_t Platform_TimeUs(void);
+/* port_log.c: detailed log (prefix with time and frame, polled events,
+ * render time per pass: field, intro, bg fill, ui, hud, present/compose) */
+enum { PORT_PASS_FIELD, PORT_PASS_INTRO, PORT_PASS_FILL, PORT_PASS_UI, PORT_PASS_HUD, PORT_PASS_PRESENT,
+       PORT_PASS_WIDE, PORT_PASS_COUNT };
+extern uint32_t gPortPassUs[PORT_PASS_COUNT], gPortPassN[PORT_PASS_COUNT], gPortPassLast[PORT_PASS_COUNT];
+int Port_LogEnabled(void);
+int Port_LogPrefix(char *buf, int n);
+void Port_LogFrame(void);
+void Port_LogCounts(int *npc, int *sprites);
 
 /* ---- platform interface ---- */
 /* Shows a finished frame (ABGR8888, `pitch` pixels per row), scaled so that

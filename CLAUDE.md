@@ -77,6 +77,15 @@ make -f Makefile.port TARGET=vita vpk -j16    # Vita            -> build/port-vi
   (vita2d), Kampf-Layer auf der GPU; `vita_hq.c` – HQ-Shader und **Scale3x-Shader** fürs Kampffeld.
 - `platform/host/main_host.c` – Headless-Testläufer (Screenshots als PPM, Eingaben per Env).
 - Vita-Daten: `ux0:data/pokemon_saphir/` (Flash-Save `saphir.sav`, Emulator-kompatibel, `settings.ini`).
+- **Log** (ab 0.3.18, `port/port_log.c` + `Platform_Log` in `main_vita.c`): `ux0:data/pokemon_saphir/log.txt`
+  (vorheriger Lauf `log_prev.txt`). Jede Zeile `[min:s.ms fFrame]`. Inhalt: Start (Version, Datum),
+  `[sys]` (Akku, Takte, Speicher; alle 60 s), `[perf]` jede Sekunde (Arbeit avg/max, >16,7 ms, übersprungene
+  Frames, Zeit je Render-Durchgang, Present-Schritte wait/upload/draw/pace, NPCs, Sprites, Audio-Aussetzer),
+  `[slow]` je Frame über 16,7 ms (max. 5/s), `[scene]` Callback-Wechsel, `[map]`, `[weather]`,
+  `[battle]` Start/Ende mit Teams, `[keys]`, `[ui]`, `[state]`, `[hang]`. Geschrieben über RAM-Puffer
+  von einem eigenen Thread alle 0,5 s (Absturz: max. 0,5 s fehlen), Grenze 24 MB.
+  Adressen zu Namen: `python3 tools/port/log_names.py log.txt pokemon_sapphire_vita-<version>.elf`.
+  Am Host gleiche Zeilen mit `PKR_LOG=1`.
 
 ## 6. Festgelegte Entscheidungen (nicht ohne Mike ändern)
 - Oberwelt Weitsicht 480×272 bei 2×, alles was geht **pixelgenau**. Räume zentriert, Höhlen wie

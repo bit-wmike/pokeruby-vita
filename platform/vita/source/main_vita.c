@@ -18,6 +18,10 @@
 #include <psp2/kernel/processmgr.h>
 #include <psp2/kernel/threadmgr.h>
 #include <psp2/power.h>
+#include <psp2/rtc.h>
+#include <psp2/kernel/sysmem.h>
+#include <psp2/kernel/threadmgr/lw_mutex.h>
+#include <malloc.h>
 #include <pthread.h>
 #include <sched.h>
 #include <stdarg.h>
@@ -52,7 +56,18 @@ int _newlib_heap_size_user = 128 * 1024 * 1024;
 
 /* ---------------------------------------------------------------- log */
 
+/* Every line gets time since start and frame number (port_log.c) and goes
+ * into a RAM buffer; a low priority thread writes it to log.txt every half
+ * second, so the game thread never waits for the memory card (before 0.3.18
+ * each line was written and flushed at once). Lost on a crash: at most the
+ * last half second. Above LOG_LIMIT bytes only warnings/hangs are kept. */
+#define LOG_BUF (256 * 1024)
+#define LOG_LIMIT (24 * 1024 * 1024)
 static FILE *sLog;
+static char sLogBuf[LOG_BUF];
+static volatile unsigned sLogLen, sLogDropped, sLogWritten;
+static SceKernelLwMutexWork sLogLock;
+static int sLogLockOk;
 
 uint64_t Platform_TimeUs(void)
 {
@@ -61,13 +76,109 @@ uint64_t Platform_TimeUs(void)
 
 void Platform_Log(const char *fmt, ...)
 {
+    char line[512];
+    int n;
     va_list ap;
     if (!sLog)
         return;
+    n = Port_LogPrefix(line, sizeof(line));
     va_start(ap, fmt);
-    vfprintf(sLog, fmt, ap);
+    n += vsnprintf(line + n, sizeof(line) - n, fmt, ap);
     va_end(ap);
-    fflush(sLog);
+    if (n >= (int)sizeof(line))
+        n = sizeof(line) - 1;
+    if (sLogWritten > LOG_LIMIT && !strstr(line, "[hang]") && !strstr(line, "[log]"))
+        return;
+    if (sLogLockOk)
+        sceKernelLockLwMutex(&sLogLock, 1, NULL);
+    if (sLogLen + n <= LOG_BUF) {
+        memcpy(sLogBuf + sLogLen, line, n);
+        sLogLen += n;
+    } else {
+        sLogDropped++;
+    }
+    if (sLogLockOk)
+        sceKernelUnlockLwMutex(&sLogLock, 1);
+}
+
+/* writes the buffer out (writer thread, hang watchdog, exit) */
+void Platform_LogFlush(void)
+{
+    static char out[LOG_BUF];
+    static SceKernelLwMutexWork flushLock;
+    static int init;
+    unsigned n, dropped;
+    if (!sLog)
+        return;
+    if (!init) {
+        init = sceKernelCreateLwMutex(&flushLock, "pkmn_logflush", 0, 0, NULL) >= 0 ? 1 : -1;
+    }
+    if (init > 0)
+        sceKernelLockLwMutex(&flushLock, 1, NULL);
+    if (sLogLockOk)
+        sceKernelLockLwMutex(&sLogLock, 1, NULL);
+    n = sLogLen;
+    memcpy(out, sLogBuf, n);
+    sLogLen = 0;
+    dropped = sLogDropped;
+    sLogDropped = 0;
+    if (sLogLockOk)
+        sceKernelUnlockLwMutex(&sLogLock, 1);
+    if (n) {
+        fwrite(out, 1, n, sLog);
+        sLogWritten += n;
+    }
+    if (dropped)
+        fprintf(sLog, "[log] %u lines lost (buffer full)\n", dropped);
+    if (n || dropped)
+        fflush(sLog);
+    if (init > 0)
+        sceKernelUnlockLwMutex(&flushLock, 1);
+}
+
+static int LogThread(SceSize args, void *argp)
+{
+    (void)args;
+    (void)argp;
+    for (;;) {
+        sceKernelDelayThread(500 * 1000);
+        Platform_LogFlush();
+    }
+    return 0;
+}
+
+static void LogInit(void)
+{
+    SceUID th;
+    SceDateTime now;
+    sLogLockOk = sceKernelCreateLwMutex(&sLogLock, "pkmn_log", 0, 0, NULL) >= 0;
+    sLog = fopen(LOG_PATH, "w");
+    if (!sLog)
+        return;
+    Platform_Log(GAME_NAME " Vita %s (built " __DATE__ " " __TIME__ ")\n", PKR_PORT_VERSION);
+    if (sceRtcGetCurrentClockLocalTime(&now) >= 0)
+        Platform_Log("[sys] date %04d-%02d-%02d %02d:%02d:%02d\n", now.year, now.month, now.day, now.hour,
+                     now.minute, now.second);
+    th = sceKernelCreateThread("pkmn_log", LogThread, 0x10000100 + 40, 0x4000, 0, 0, NULL);
+    if (th >= 0)
+        sceKernelStartThread(th, 0, NULL);
+}
+
+/* every 60 s and at start: battery, clocks, memory */
+static void LogSystem(void)
+{
+    SceKernelFreeMemorySizeInfo mem;
+    struct mallinfo mi = mallinfo();
+    memset(&mem, 0, sizeof(mem));
+    mem.size = sizeof(mem);
+    sceKernelGetFreeMemorySize(&mem);
+    Platform_Log("[sys] battery %d%%%s %d mV %d C, clock arm %d bus %d gpu %d xbar %d MHz, "
+                 "heap used %u KB, free user %d KB cdram %d KB phycont %d KB, log %u KB\n",
+                 scePowerGetBatteryLifePercent(), scePowerIsBatteryCharging() ? " (laedt)" : "",
+                 scePowerGetBatteryVolt(), scePowerGetBatteryTemp() / 100,
+                 scePowerGetArmClockFrequency(), scePowerGetBusClockFrequency(), scePowerGetGpuClockFrequency(),
+                 scePowerGetGpuXbarClockFrequency(), (unsigned)(mi.uordblks / 1024), mem.size_user / 1024,
+                 mem.size_cdram / 1024, mem.size_phycont / 1024, sLogWritten / 1024);
 }
 
 /* -------------------------------------------------------------- video */
@@ -135,34 +246,88 @@ static void VideoInit(void)
     VitaHq_Available();   /* compile the shaders now, not at the first battle (a pause on black) */
 }
 
-static int sCatchup; /* frames computed but not drawn (pacing) */
-
-/* Frame timing for the log: work time = game logic + rendering of a frame. */
+/* Frame timing for the log: work time = game logic + rendering of a frame
+ * (from the end of the last present to the start of this one). Once a
+ * second a [perf] line with averages/maxima, the render passes and the
+ * present steps; a frame over 16.7 ms also gets its own [slow] line. */
 static SceUInt64 sLastPresentEnd;
-static SceUInt64 sWorkSum, sWorkMax;
-static int sWorkFrames, sSlowFrames;
 static int sLastW = 240, sLastH = 160, sLastZoom = 160;
+enum { PT_WAIT, PT_UPLOAD, PT_DRAW, PT_PACE, PT_COUNT };   /* present steps */
+static uint32_t sPt[PT_COUNT], sPtSum[PT_COUNT], sPtMax[PT_COUNT];
+static volatile uint32_t sAudioDry, sAudioStretch, sAudioSqueeze;
+static int sCatchup; /* frames computed but not drawn (pacing) */
 
 static void PerfFrame(SceUInt64 start)
 {
+    static SceUInt64 workSum, workMax;
+    static int frames, slow, slowLogged, battleFrames, seconds;
+    static uint32_t passSnap[PORT_PASS_COUNT], passNSnap[PORT_PASS_COUNT];
+    int i;
     if (sLastPresentEnd) {
         SceUInt64 work = start - sLastPresentEnd;
-        sWorkSum += work;
-        if (work > sWorkMax)
-            sWorkMax = work;
-        if (work > 16000)
-            sSlowFrames++;
-        if (++sWorkFrames == 300) {
-            Platform_Log("[perf] frame work avg %.2f ms (render %.2f ms), max %.2f ms, >16 ms: %d of 300, "
-                         "view %dx%d, catchup %d, render threads %d\n",
-                         sWorkSum / 300.0 / 1000.0, Port_ProfileAverageUs(PORT_PROF_RENDER) / 1000.0,
-                         sWorkMax / 1000.0, sSlowFrames, sLastW, sLastH, sCatchup,
-                         1 + virtuappu_mode1_worker_count());
+        workSum += work;
+        if (work > workMax)
+            workMax = work;
+        battleFrames += sBattleOn;
+        if (work > 16700) {
+            slow++;
+            if (slowLogged++ < 5)
+                Platform_Log("[slow] work %.2f ms %s | field %.2f intro %.2f fill %.2f ui %.2f hud %.2f present %.2f wide %.2f"
+                             " | last present: wait %.2f upload %.2f draw %.2f pace %.2f\n",
+                             work / 1000.0, sBattleOn ? "battle" : "field",
+                             gPortPassLast[PORT_PASS_FIELD] / 1000.0, gPortPassLast[PORT_PASS_INTRO] / 1000.0,
+                             gPortPassLast[PORT_PASS_FILL] / 1000.0, gPortPassLast[PORT_PASS_UI] / 1000.0,
+                             gPortPassLast[PORT_PASS_HUD] / 1000.0, gPortPassLast[PORT_PASS_PRESENT] / 1000.0,
+                             gPortPassLast[PORT_PASS_WIDE] / 1000.0, sPt[PT_WAIT] / 1000.0,
+                             sPt[PT_UPLOAD] / 1000.0, sPt[PT_DRAW] / 1000.0, sPt[PT_PACE] / 1000.0);
+        }
+        memset(gPortPassLast, 0, sizeof(gPortPassLast));
+        if (++frames == 60) {
+            static const char *const pn[PORT_PASS_COUNT] = {"field", "intro", "fill", "ui", "hud", "present", "wide"};
+            char passes[256];
+            int o = 0, npc, spr;
+            passes[0] = 0;
+            for (i = 0; i < PORT_PASS_COUNT; i++) {
+                uint32_t n = gPortPassN[i] - passNSnap[i], us = gPortPassUs[i] - passSnap[i];
+                if (n)
+                    o += snprintf(passes + o, sizeof(passes) - o, " %s %.2f/%u", pn[i], us / (double)n / 1000.0, n);
+                passSnap[i] = gPortPassUs[i];
+                passNSnap[i] = gPortPassN[i];
+            }
+            Port_LogCounts(&npc, &spr);
+            Platform_Log("[perf] work avg %.2f max %.2f ms, >16.7 ms %d/60, skipped %d, %s %dx%d |%s"
+                         " | wait %.2f/%.2f upload %.2f/%.2f draw %.2f/%.2f pace %.2f/%.2f (avg/max ms)"
+                         " | npc %d sprites %d | audio dry %u stretch %u squeeze %u\n",
+                         workSum / 60.0 / 1000.0, workMax / 1000.0, slow, sCatchup,
+                         battleFrames ? "battle" : "field", sLastW, sLastH, passes,
+                         sPtSum[PT_WAIT] / 60000.0, sPtMax[PT_WAIT] / 1000.0, sPtSum[PT_UPLOAD] / 60000.0,
+                         sPtMax[PT_UPLOAD] / 1000.0, sPtSum[PT_DRAW] / 60000.0, sPtMax[PT_DRAW] / 1000.0,
+                         sPtSum[PT_PACE] / 60000.0, sPtMax[PT_PACE] / 1000.0, npc, spr,
+                         sAudioDry, sAudioStretch, sAudioSqueeze);
+            sAudioDry = sAudioStretch = sAudioSqueeze = 0;
+            memset(sPtSum, 0, sizeof(sPtSum));
+            memset(sPtMax, 0, sizeof(sPtMax));
             sCatchup = 0;
-            sWorkSum = sWorkMax = 0;
-            sWorkFrames = sSlowFrames = 0;
+            workSum = workMax = 0;
+            frames = slow = slowLogged = battleFrames = 0;
+            if (++seconds % 60 == 0)
+                LogSystem();
         }
     }
+}
+
+/* time of one present step (Platform_Present*) */
+static SceUInt64 sPtT0;
+static void PtMark(int k)
+{
+    SceUInt64 t = sceKernelGetProcessTimeWide();
+    if (k >= 0) {
+        sPt[k] = (uint32_t)(t - sPtT0);
+        sPtSum[k] += sPt[k];
+        if (sPt[k] > sPtMax[k])
+            sPtMax[k] = sPt[k];
+    }
+    sPtT0 = t;
 }
 
 /* Frame pacing: logic frame n is due at display vblank sAnchorVcount + n.
@@ -345,7 +510,9 @@ void Platform_Present(const uint32_t *pixels, int width, int height, int pitch, 
 
     PerfFrame(sceKernelGetProcessTimeWide());
     gVitaPhase = 2;
+    PtMark(-1);
     vita2d_wait_rendering_done();
+    PtMark(PT_WAIT);
     gVitaPhase = 3;
     dst = (uint8_t *)vita2d_texture_get_datap(sTex);
     stride = vita2d_texture_get_stride(sTex);
@@ -356,12 +523,15 @@ void Platform_Present(const uint32_t *pixels, int width, int height, int pitch, 
     sLastH = height;
     sLastZoom = zoomHeight;
 
+    PtMark(PT_UPLOAD);
     vita2d_pool_reset();
     DrawGame();
     gVitaPhase = 5;
     vita2d_end_drawing();
+    PtMark(PT_DRAW);
     gVitaPhase = 6;
     WaitDue();
+    PtMark(PT_PACE);
     gVitaPhase = 4;
     vita2d_swap_buffers();
     gVitaPhase = 1;
@@ -372,7 +542,9 @@ void Platform_PresentBattle(const PortBattleFrame *f)
 {
     PerfFrame(sceKernelGetProcessTimeWide());
     gVitaPhase = 2;
+    PtMark(-1);
     vita2d_wait_rendering_done();
+    PtMark(PT_WAIT);
     gVitaPhase = 3;
     if (f->stageSerial != sStageSerial || !sBattleOn) {
         Upload(sStageTex, f->stage, 480, 272, 480);
@@ -387,12 +559,15 @@ void Platform_PresentBattle(const PortBattleFrame *f)
     sLastH = 272;
     sLastZoom = 272;
 
+    PtMark(PT_UPLOAD);
     vita2d_pool_reset();
     DrawGame();
     gVitaPhase = 5;
     vita2d_end_drawing();
+    PtMark(PT_DRAW);
     gVitaPhase = 6;
     WaitDue();
+    PtMark(PT_PACE);
     gVitaPhase = 4;
     vita2d_swap_buffers();
     gVitaPhase = 1;
@@ -435,6 +610,7 @@ static int WatchdogThread(SceSize args, void *argp)
                 Platform_DescribePacing();
             }
             Platform_Log("[hang] state %s\n", Port_StateDumpTo("haenger_zustand.bin") ? "written" : "failed");
+            Platform_LogFlush();
         }
     }
     return 0;
@@ -489,8 +665,10 @@ static int AudioThread(SceSize args, void *argp)
         int i, take = AUDIO_GRAIN;
         if (filling && level >= AUDIO_TARGET)
             filling = 0;
-        if (!filling && level < AUDIO_GRAIN)
+        if (!filling && level < AUDIO_GRAIN) {
             filling = 1;   /* ran dry: wait for the cushion */
+            sAudioDry++;
+        }
         if (filling) {
             for (i = 0; i < AUDIO_GRAIN; i++) {
                 buf[i * 2] = sHoldL;
@@ -500,9 +678,9 @@ static int AudioThread(SceSize args, void *argp)
             continue;
         }
         if (level < AUDIO_TARGET - 600)
-            take = AUDIO_GRAIN - 1;   /* stretch: one sample twice */
+            take = AUDIO_GRAIN - 1, sAudioStretch++;   /* stretch: one sample twice */
         else if (level > AUDIO_TARGET + 600 && level > AUDIO_GRAIN + 1)
-            take = AUDIO_GRAIN + 1;   /* squeeze: one sample left out */
+            take = AUDIO_GRAIN + 1, sAudioSqueeze++;   /* squeeze: one sample left out */
         for (i = 0; i < AUDIO_GRAIN; i++) {
             int si = take == AUDIO_GRAIN ? i : take < AUDIO_GRAIN ? (i < AUDIO_GRAIN / 2 ? i : i - 1)
                                                                   : (i < AUDIO_GRAIN / 2 ? i : i + 1);
@@ -995,9 +1173,9 @@ int main(int argc, char **argv)
     sceIoMkdir(DATA_DIR, 0777);
     sceIoRemove(DATA_DIR "/log_prev.txt");
     sceIoRename(LOG_PATH, DATA_DIR "/log_prev.txt");
-    sLog = fopen(LOG_PATH, "w");
-    Platform_Log(GAME_NAME " Vita %s\n", PKR_PORT_VERSION);
+    LogInit();
     CheckGthreads();
+    LogSystem();
 
     sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG);
     VideoInit();

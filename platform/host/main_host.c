@@ -184,6 +184,11 @@ void Platform_WriteSave(const void *data, size_t size)
 void Platform_Log(const char *fmt, ...)
 {
     va_list ap;
+    if (Port_LogEnabled()) {   /* PKR_LOG=1: lines as on the Vita, with time and frame */
+        char pre[64];
+        Port_LogPrefix(pre, sizeof(pre));
+        fputs(pre, stdout);
+    }
     va_start(ap, fmt);
     vprintf(fmt, ap);
     va_end(ap);
