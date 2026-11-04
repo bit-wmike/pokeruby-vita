@@ -5,7 +5,9 @@ from the [pret/pokeruby](https://github.com/pret/pokeruby) decompilation (its RE
 `README-decomp.md`, setup: `INSTALL.md`). No emulator: the game's C
 code runs directly on the Vita.
 
-## Status (0.2.6)
+Current state, decisions and the development handover (German): `CLAUDE.md`.
+
+## Status (0.2.6, older notes)
 
 - German Sapphire runs on the host test build from the intro to the
   overworld, with music and sound; x86 and ARM builds produce bit-identical
