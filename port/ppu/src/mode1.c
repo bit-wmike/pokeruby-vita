@@ -26,6 +26,10 @@
 #include <arm_neon.h>
 #define MODE1_NEON 1
 #endif
+#if !defined(MODE1_NEON) && defined(__SSE2__) && !defined(MODE1_NO_SSE2)
+#include <emmintrin.h>
+#define MODE1_SSE2 1   /* host build: the same vector loops as NEON */
+#endif
 
 virtuappu_mode1_pre_line_fn virtuappu_mode1_pre_line_callback = NULL;
 int virtuappu_mode1_bg_dx[4];
@@ -69,6 +73,7 @@ static uint32_t mode1_backdrop_key_last;
 
 /* Window edges in GBA-screen coordinates -> wide frame coordinates. */
 int virtuappu_mode1_win_port;   /* window edges mapped even at offset 0 */
+const uint8_t *virtuappu_mode1_line_mask;   /* lines to render (NULL: all) */
 static inline void mode1_port_window(int* left, int* right, int* top, int* bottom) {
     const bool port = virtuappu_mode1_win_port || virtuappu_mode1_win_dx || virtuappu_mode1_win_dy;
     if (port && *left == *right)
@@ -2864,6 +2869,20 @@ static inline __attribute__((always_inline)) uint32_t mode1_cc_resolve(const Mod
     return top_color;
 }
 
+/* One window's span [left, right) (wrapped: [left, end) and [0, right)) set
+ * to ctrl: the per-pixel test x >= left && x < right (|| when wrapped). */
+static inline void mode1_win_span(uint8_t* win_line, int frame_width, int left, int right, bool wrap,
+                                  uint8_t ctrl) {
+    if (wrap) {
+        const int a = left < 0 ? 0 : left, b = right > frame_width ? frame_width : right;
+        if (a < frame_width) memset(win_line + a, ctrl, (size_t)(frame_width - a));
+        if (b > 0) memset(win_line, ctrl, (size_t)b);
+    } else {
+        const int a = left < 0 ? 0 : left, b = right > frame_width ? frame_width : right;
+        if (a < b) memset(win_line + a, ctrl, (size_t)(b - a));
+    }
+}
+
 /* Layer selection and colour effects of the compact path, in passes.
  *
  * 1. The enabled BGs are painted back to front into two code planes, the
@@ -2889,24 +2908,18 @@ static inline __attribute__((always_inline)) void mode1_compact_composite(const 
     memset(top_code, 0, (size_t)frame_width * sizeof(uint16_t));
     memset(bot_code, 0, (size_t)frame_width * sizeof(uint16_t));
     if (windowed) {
-        for (int x = 0; x < frame_width; ++x) {
-            uint8_t win_ctrl = c.outside_ctrl;
-            /* GBA window precedence: WIN0 > WIN1 > OBJ-window > outside. */
-            if (c.objwin_on && virtuappu_mode1_obj_window[x]) {
-                win_ctrl = c.objwin_ctrl;
-            }
-            if (c.win1_v_active) {
-                const bool in_h = c.win1_h_wrap ? (x >= c.win1_left || x < c.win1_right)
-                                                : (x >= c.win1_left && x < c.win1_right);
-                if (in_h) win_ctrl = c.win1_ctrl;
-            }
-            if (c.win0_v_active) {
-                const bool in_h = c.win0_h_wrap ? (x >= c.win0_left || x < c.win0_right)
-                                                : (x >= c.win0_left && x < c.win0_right);
-                if (in_h) win_ctrl = c.win0_ctrl;
-            }
-            win_line[x] = win_ctrl;
+        /* GBA window precedence: WIN0 > WIN1 > OBJ-window > outside, as
+         * spans painted in reverse order (same result as the per-pixel
+         * test, performance 0.3.17). */
+        memset(win_line, c.outside_ctrl, (size_t)frame_width);
+        if (c.objwin_on) {
+            for (int x = 0; x < frame_width; ++x)
+                if (virtuappu_mode1_obj_window[x]) win_line[x] = c.objwin_ctrl;
         }
+        if (c.win1_v_active)
+            mode1_win_span(win_line, frame_width, c.win1_left, c.win1_right, c.win1_h_wrap, c.win1_ctrl);
+        if (c.win0_v_active)
+            mode1_win_span(win_line, frame_width, c.win0_left, c.win0_right, c.win0_h_wrap, c.win0_ctrl);
     }
 
     for (int k = c.n - 1; k >= 0; --k) {
@@ -2914,7 +2927,38 @@ static inline __attribute__((always_inline)) void mode1_compact_composite(const 
         const uint16_t layer_bits = (uint16_t)((c.bg[k] + 1u) << 9u);
         if (windowed) {
             const uint8_t bit = c.bit[k];
-            for (int x = 0; x < frame_width; ++x) {
+            int x = 0;
+#ifdef MODE1_NEON
+            const uint16x8_t lb = vdupq_n_u16(layer_bits);
+            const uint8x8_t vbit = vdup_n_u8(bit);
+            for (; x + 8 <= frame_width; x += 8) {
+                const uint16x8_t v = vld1q_u16(tok + x);
+                const uint16x8_t w = vmovl_u8(vand_u8(vld1_u8(win_line + x), vbit));
+                const uint16x8_t old = vld1q_u16(top_code + x);
+                const uint16x8_t m = vandq_u16(vtstq_u16(v, v), vtstq_u16(w, w));
+                vst1q_u16(bot_code + x, vbslq_u16(m, old, vld1q_u16(bot_code + x)));
+                vst1q_u16(top_code + x, vbslq_u16(m, vorrq_u16(v, lb), old));
+            }
+#elif defined(MODE1_SSE2)
+            const __m128i lb = _mm_set1_epi16((short)layer_bits);
+            const __m128i vbit = _mm_set1_epi8((char)bit);
+            const __m128i zero = _mm_setzero_si128();
+            for (; x + 8 <= frame_width; x += 8) {
+                const __m128i v = _mm_loadu_si128((const __m128i*)(tok + x));
+                const __m128i w8 = _mm_and_si128(_mm_loadl_epi64((const __m128i*)(win_line + x)), vbit);
+                const __m128i w = _mm_unpacklo_epi8(w8, zero);
+                const __m128i old = _mm_loadu_si128((const __m128i*)(top_code + x));
+                /* m = (v != 0) && (w != 0) */
+                const __m128i m = _mm_andnot_si128(_mm_or_si128(_mm_cmpeq_epi16(v, zero), _mm_cmpeq_epi16(w, zero)),
+                                                   _mm_cmpeq_epi16(zero, zero));
+                const __m128i bot = _mm_loadu_si128((const __m128i*)(bot_code + x));
+                _mm_storeu_si128((__m128i*)(bot_code + x),
+                                 _mm_or_si128(_mm_and_si128(m, old), _mm_andnot_si128(m, bot)));
+                _mm_storeu_si128((__m128i*)(top_code + x),
+                                 _mm_or_si128(_mm_and_si128(m, _mm_or_si128(v, lb)), _mm_andnot_si128(m, old)));
+            }
+#endif
+            for (; x < frame_width; ++x) {
                 const uint16_t v = (win_line[x] & bit) != 0u ? tok[x] : 0u;
                 const uint16_t old = top_code[x];
                 bot_code[x] = v != 0u ? old : bot_code[x];
@@ -3575,7 +3619,10 @@ typedef struct Mode1RenderLinesContext {
 
 static void mode1_render_lines(const Mode1RenderLinesContext* context, int first_line, int last_line,
                                uint32_t old_path_lines[MODE1_OLD_PATH_COUNT]) {
+    const uint8_t* const line_mask = virtuappu_mode1_line_mask;
     for (int line = first_line; line < last_line; ++line) {
+        if (line_mask != NULL && !line_mask[line])
+            continue;
         uint16_t line_dispcnt = context->affine ? context->dispcnt : context->per_line_dispcnt[line];
         const uint8_t* prev_override = virtuappu_mode1_io_thread_override;
 

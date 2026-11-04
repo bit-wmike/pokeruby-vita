@@ -52,6 +52,9 @@ typedef struct virtuappu_mode1_region {
 extern virtuappu_mode1_region virtuappu_mode1_bg_regions[4][VIRTUAPPU_MODE1_MAX_REGIONS];
 extern int virtuappu_mode1_bg_region_count[4];
 extern int virtuappu_mode1_win_port;
+/* Pokémon port: lines to render (NULL = all; 0 = line skipped, its output
+ * row left as it is). The battle's UI/HUD passes need only a few lines. */
+extern const uint8_t *virtuappu_mode1_line_mask;
 /* Pokémon port: per-BG screen map override (VRAM offset, 64x64 tiles) and
  * clip rectangles (pixels outside are transparent for that BG). */
 extern uint32_t virtuappu_mode1_bg_screen_override[4];

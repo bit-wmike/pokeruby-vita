@@ -47,10 +47,16 @@ static int ShotWanted(int frame)
     return strstr(sShotList, buf) != NULL;
 }
 
+double gPortComposeUs;   /* CPU compose time (host diagnostics, PKR_STAGE_TIME) */
+
 void Platform_PresentBattle(const PortBattleFrame *f)
 {
     static uint32_t fb[272 * 480];
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
     PortStage_ComposeCpu(f, fb, 480);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    gPortComposeUs += (t1.tv_sec - t0.tv_sec) * 1e6 + (t1.tv_nsec - t0.tv_nsec) / 1e3;
     Platform_Present(fb, 480, 272, 480, 272);
 }
 

@@ -361,8 +361,12 @@ static void RenderFrame(void)
         static uint32_t field[FIELD_W * 160], ui[FIELD_W * 160];
         int fw, fh;
 #ifndef __vita__
-        static double acc[3]; static int nacc; struct timespec ts0, ts1;
-#define STAGE_T(k) do { clock_gettime(CLOCK_MONOTONIC, &ts1); acc[k] += (ts1.tv_sec - ts0.tv_sec) * 1e6 + (ts1.tv_nsec - ts0.tv_nsec) / 1e3; ts0 = ts1; if (k == 2 && ++nacc == 200) { if (getenv("PKR_STAGE_TIME")) fprintf(stderr, "[stage] field %.0f ui %.0f compose %.0f us\n", acc[0] / 200, acc[1] / 200, acc[2] / 200); acc[0] = acc[1] = acc[2] = 0; nacc = 0; } } while (0)
+        static double acc[8]; static int nacc, ncnt[8]; struct timespec ts0, ts1;
+        /* host diagnostics: time per pass, averaged over 200 battle frames
+         * (field, intro, bgfill, ui, hud, present = port side + CPU compose) */
+#define STAGE_T(k) do { clock_gettime(CLOCK_MONOTONIC, &ts1); acc[k] += (ts1.tv_sec - ts0.tv_sec) * 1e6 + (ts1.tv_nsec - ts0.tv_nsec) / 1e3; ncnt[k]++; ts0 = ts1; \
+    if (k == 6 && ++nacc == 200) { if (getenv("PKR_STAGE_TIME")) fprintf(stderr, "[stage] field %.0f intro %.0f/%d fill %.0f/%d ui %.0f hud %.0f/%d prep %.0f compose %.0f us | sum %.0f\n", acc[0] / 200, acc[1] / 200, ncnt[1], acc[2] / 200, ncnt[2], acc[3] / 200, acc[4] / 200, ncnt[4], (acc[5] - gPortComposeUs) / 200, gPortComposeUs / 200, (acc[0]+acc[1]+acc[2]+acc[3]+acc[4]+acc[5]) / 200); memset(acc, 0, sizeof(acc)); memset(ncnt, 0, sizeof(ncnt)); gPortComposeUs = 0; nacc = 0; } } while (0)
+        extern double gPortComposeUs;
         clock_gettime(CLOCK_MONOTONIC, &ts0);
 #else
 #define STAGE_T(k) do {} while (0)
@@ -379,6 +383,7 @@ static void RenderFrame(void)
         Port_ProfileBegin(PORT_PROF_RENDER);
         virtuappu_mode1_render_frame(&ppu);
         sRendering = 0;
+        STAGE_T(0);
         {   /* the intro scenery alone, while it slides in */
             static uint32_t intro[FIELD_W * 160];
             int PortStage_IntroPass(void);
@@ -391,6 +396,7 @@ static void RenderFrame(void)
                 virtuappu_mode1_render_frame(&ppu);
                 memcpy(gHostIo, io, sizeof(io));
                 PortStage_SetIntroPixels(intro);
+                STAGE_T(1);
             } else {
                 PortStage_SetIntroPixels(NULL);
             }
@@ -410,9 +416,9 @@ static void RenderFrame(void)
                 memcpy(gHostIo, io, sizeof(io));
                 ppu.frame_height = (uint16_t)fh;
                 PortStage_SetBgFillPixels(fill, FIELD_W);
+                STAGE_T(2);
             }
         }
-        STAGE_T(0);
         PortStage_UiPass();
         memset(&ppu, 0, sizeof(ppu));
         ppu.frame_width = PORT_GBA_W;
@@ -422,22 +428,27 @@ static void RenderFrame(void)
         virtuappu_mode1_set_output_buffer(ui, FIELD_W);
         virtuappu_mode1_pre_line_callback = NULL;
         virtuappu_mode1_render_frame(&ppu);
+        STAGE_T(3);
         {   /* the healthboxes alone when a window covers them */
             static uint32_t hud[FIELD_W * 160];
             int PortStage_HudPass(void);
             void PortStage_SetHudPixels(const uint32_t *pix);
+            void PortStage_HudClearRows(uint32_t *pix, int pitch);
             if (PortStage_HudPass()) {
                 virtuappu_mode1_set_output_buffer(hud, FIELD_W);
                 virtuappu_mode1_render_frame(&ppu);
+                PortStage_HudClearRows(hud, FIELD_W);
                 PortStage_SetHudPixels(hud);
+                STAGE_T(4);
             } else {
                 PortStage_SetHudPixels(NULL);
             }
+            virtuappu_mode1_line_mask = NULL;   /* the UI/HUD passes' lines */
         }
-        STAGE_T(1);
         Port_ProfileEnd(PORT_PROF_RENDER);
         PortStage_Present(field, FIELD_W, ui, FIELD_W);
-        STAGE_T(2);
+        STAGE_T(5);
+        STAGE_T(6);
         return;
     }
 

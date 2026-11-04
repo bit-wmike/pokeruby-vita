@@ -806,6 +806,7 @@ static void ClearKnobs(void)
         virtuappu_mode1_bg_clip_y0[b] = virtuappu_mode1_bg_clip_y1[b] = 0;
     }
     virtuappu_mode1_backdrop_key = KEY;
+    virtuappu_mode1_line_mask = NULL;
     virtuappu_mode1_win_dx = virtuappu_mode1_win_dy = 0;
     virtuappu_mode1_win_port = 1;
     virtuappu_mode1_line_dy = 0;
@@ -958,8 +959,42 @@ void PortStage_FieldPass(int *w, int *h)
     }
 #endif
     FieldKnobs(0);
+    /* Present hides the rows under the text band (y >= 112, alpha 0);
+     * row 112 stays rendered: the Vita's Scale3x compares its colours
+     * with row 111's. Not while the intro scenery or the dex page is
+     * drawn over them (performance, 0.3.17). */
+    if (!gPortDexPage && !gPortBattleIntro) {
+        static u8 mask[FH];
+        if (!mask[0])
+            memset(mask, 1, 113);
+        virtuappu_mode1_line_mask = mask;
+    }
     *w = FW;
     *h = FH;
+}
+
+/* The UI/HUD passes are used only where Present copies from them (the
+ * windows' regions, the boxes of the UI sprites): only those lines are
+ * rendered (performance, 0.3.17). */
+static u8 sLineMask[PORT_GBA_H];
+
+static void MaskRows(int y0, int h)
+{
+    int y;
+    for (y = y0 < 0 ? 0 : y0; y < y0 + h && y < PORT_GBA_H; y++)
+        sLineMask[y] = 1;
+}
+
+static void MaskObjs(int hudOnly)
+{
+    int i, ox, oy, ow, oh;
+    for (i = 0; i < 128; i++) {
+        if (!sUiObj[i] || (hudOnly && !IsHud(i)))
+            continue;
+        ObjBox(i, &ox, &oy, &ow, &oh);
+        if (ow > 0 && oh > 0)
+            MaskRows(oy, oh);
+    }
 }
 
 /* Pass 2: BG0 and the window/healthbox sprites, GBA sized (240x160). */
@@ -971,6 +1006,11 @@ void PortStage_UiPass(void)
     for (i = 0; i < 128; i++)
         if (!sUiObj[i])
             virtuappu_mode1_obj_dy[i] = 4000;
+    memset(sLineMask, 0, sizeof(sLineMask));
+    for (i = 0; i < sRegCount; i++)
+        MaskRows(sReg[i].y0 - sReg[i].dy, sReg[i].y1 - sReg[i].y0);
+    MaskObjs(0);
+    virtuappu_mode1_line_mask = sLineMask;
 }
 
 static void ObjBox(int i, int *x, int *y, int *w, int *h);
@@ -997,7 +1037,20 @@ int PortStage_HudPass(void)
     for (i = 0; i < 128; i++)
         if (!sUiObj[i] || !IsHud(i))
             virtuappu_mode1_obj_dy[i] = 4000;
+    memset(sLineMask, 0, sizeof(sLineMask));
+    MaskObjs(1);
+    virtuappu_mode1_line_mask = sLineMask;
     return 1;
+}
+
+/* after the HUD pass: the lines not rendered as a rendered empty line
+ * reads (nothing but the keyed backdrop: no pixel with alpha) */
+void PortStage_HudClearRows(u32 *pix, int pitch)
+{
+    int y;
+    for (y = 0; y < PORT_GBA_H; y++)
+        if (!sLineMask[y])
+            memset(pix + y * pitch, 0, PORT_GBA_W * sizeof(u32));
 }
 
 void PortStage_SetHudPixels(const u32 *pix)

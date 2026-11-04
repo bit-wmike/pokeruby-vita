@@ -284,6 +284,23 @@ static void Upload(vita2d_texture *t, const uint32_t *src, int w, int h, int pit
         memcpy(dst + y * stride, src + y * pitch, (size_t)w * 4);
 }
 
+/* only the rows the blits draw from (UI and HUD layers: the rest of the
+ * texture is never drawn; performance, 0.3.17) */
+static void UploadBlitRows(vita2d_texture *t, const uint32_t *src, int pitch, const PortBlit *b, int n)
+{
+    uint8_t *dst = (uint8_t *)vita2d_texture_get_datap(t);
+    unsigned stride = vita2d_texture_get_stride(t);
+    uint8_t rows[160];
+    int i, y;
+    memset(rows, 0, sizeof(rows));
+    for (i = 0; i < n; i++)
+        for (y = b[i].sy < 0 ? 0 : b[i].sy; y < b[i].sy + b[i].h && y < 160; y++)
+            rows[y] = 1;
+    for (y = 0; y < 160; y++)
+        if (rows[y])
+            memcpy(dst + y * stride, src + y * pitch, 240 * 4);
+}
+
 static void DrawGame(void)
 {
     int width = sLastW, height = sLastH;
@@ -362,8 +379,8 @@ void Platform_PresentBattle(const PortBattleFrame *f)
         sStageSerial = f->stageSerial;
     }
     Upload(sFieldTex, f->field, f->fieldW, f->fieldH, f->fieldPitch);
-    Upload(sUiTex, f->ui, 240, 160, f->uiPitch);
-    Upload(sHudTex, f->hud, 240, 160, 240);
+    UploadBlitRows(sUiTex, f->ui, f->uiPitch, f->blits, f->nblits);
+    UploadBlitRows(sHudTex, f->hud, 240, f->hudBlits, f->nhud);
     sBattle = *f;
     sBattleOn = 1;
     sLastW = 480;
